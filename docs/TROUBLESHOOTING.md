@@ -65,6 +65,16 @@ If you have admin access to your network:
    - Deploys web flasher interface
    - Works with or without firmware builds
 
+**Problem:** GitHub Pages deployment fails with "Permission denied" error
+
+**Solution:** Ensure the workflow has required permissions:
+```yaml
+permissions:
+  contents: write
+  pages: write  
+  id-token: write
+```
+
 ## Runtime Issues
 
 ### ESP32 Connection Problems
