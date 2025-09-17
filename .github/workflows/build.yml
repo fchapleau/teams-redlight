@@ -198,7 +198,7 @@ jobs:
   # Web deployment job
   deploy-web:
     runs-on: ubuntu-latest
-    needs: [validate, build-firmware]
+    needs: validate
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
@@ -213,12 +213,9 @@ jobs:
     
     - name: Prepare web deployment
       run: |
-        # If no artifacts downloaded, use web files directly
-        if [ ! -d build/web ]; then
-          echo "No build artifacts found, using web files directly"
-          mkdir -p build
-          cp -r web build/
-        fi
+        # Always use web files directly for Pages deployment
+        mkdir -p build
+        cp -r web build/
         
         # Ensure we have the web files
         if [ ! -f build/web/index.html ]; then
@@ -234,7 +231,6 @@ jobs:
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: build/web
-        cname: fchapleau.github.io/teams-redlight
         
   # Release creation job
   create-release:
