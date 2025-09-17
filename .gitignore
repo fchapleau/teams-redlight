@@ -1,0 +1,59 @@
+# PlatformIO
+.pio/
+.vscode/
+lib/
+.clang_complete
+.gcc-flags.json
+
+# Build artifacts
+*.bin
+*.hex
+*.elf
+*.map
+
+# IDE files
+.idea/
+*.sublime-*
+.vscode/settings.json
+.vscode/launch.json
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.swp
+*.swo
+
+# Node modules (if any web dependencies)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Secrets and credentials
+secrets.h
+credentials.json
+.env
+
+# Test reports
+test_report.xml
+coverage/
