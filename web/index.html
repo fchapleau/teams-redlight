@@ -327,31 +327,33 @@
                     }
                 };
             } else {
-                // Download latest firmware
-                log('Downloading latest firmware...');
-                fetch('https://api.github.com/repos/fchapleau/teams-redlight/releases/latest')
-                    .then(response => response.json())
-                    .then(data => {
-                        const firmwareAsset = data.assets.find(asset => asset.name.endsWith('.bin'));
-                        if (firmwareAsset) {
-                            return fetch(firmwareAsset.browser_download_url);
-                        } else {
-                            throw new Error('No firmware binary found in latest release');
-                        }
-                    })
-                    .then(response => response.arrayBuffer())
-                    .then(data => {
-                        firmwareData = new Uint8Array(data);
-                        log(`Latest firmware downloaded (${firmwareData.length} bytes)`);
-                        updateStep(2);
-                    })
-                    .catch(error => {
-                        log(`Error downloading firmware: ${error.message}`);
-                        // Fallback to a placeholder firmware for demo
+                // Use local firmware or placeholder
+                log('Preparing firmware for flashing...');
+                try {
+                    // Check if firmware file is provided via file input
+                    const customFirmwareFile = document.getElementById('customFirmwareFile');
+                    if (customFirmwareFile && customFirmwareFile.files.length > 0) {
+                        const file = customFirmwareFile.files[0];
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            firmwareData = new Uint8Array(event.target.result);
+                            log(`Custom firmware loaded (${firmwareData.length} bytes)`);
+                            updateStep(2);
+                        };
+                        reader.readAsArrayBuffer(file);
+                    } else {
+                        // Use placeholder firmware for demo
                         firmwareData = new Uint8Array(1024 * 1024); // 1MB placeholder
-                        log('Using placeholder firmware for demo');
+                        log('Using placeholder firmware for demo - please upload your own firmware binary');
                         updateStep(2);
-                    });
+                    }
+                } catch (error) {
+                    log(`Error preparing firmware: ${error.message}`);
+                    // Fallback to placeholder
+                    firmwareData = new Uint8Array(1024 * 1024); // 1MB placeholder
+                    log('Using placeholder firmware for demo');
+                    updateStep(2);
+                }
             }
         }
 

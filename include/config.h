@@ -35,7 +35,7 @@
 
 // Update Configuration
 #define OTA_UPDATE_URL_KEY "ota_url"
-#define DEFAULT_OTA_URL "https://github.com/fchapleau/teams-redlight/releases/latest/download/firmware.bin"
+#define DEFAULT_OTA_URL "http://192.168.4.1/firmware.bin"
 
 // Device States
 enum DeviceState {

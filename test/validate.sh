@@ -12,7 +12,6 @@ required_files=(
     "platformio.ini"
     "README.md"
     "web/index.html"
-    ".github/workflows/build.yml"
 )
 
 for file in "${required_files[@]}"; do
@@ -88,19 +87,19 @@ else
     exit 1
 fi
 
-# Test 6: Check GitHub Actions
-echo -e "\nTest 6: Checking GitHub Actions..."
-if grep -q "platformio" .github/workflows/build.yml; then
-    echo "✅ PlatformIO build action configured"
-else
-    echo "❌ PlatformIO build not found"
-    exit 1
-fi
-
-if grep -q "esp32dev" .github/workflows/build.yml; then
+# Test 6: Check build configuration
+echo -e "\nTest 6: Checking build configuration..."
+if grep -q "esp32dev" platformio.ini; then
     echo "✅ ESP32 target configured"
 else
     echo "❌ ESP32 target not found"
+    exit 1
+fi
+
+if grep -q "platform.*espressif32" platformio.ini; then
+    echo "✅ ESP32 platform configured"
+else
+    echo "❌ ESP32 platform not found"
     exit 1
 fi
 

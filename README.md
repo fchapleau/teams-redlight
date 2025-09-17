@@ -21,7 +21,7 @@ An ESP32-based device that shows your Microsoft Teams presence status with a red
 
 ### 1. Flash the Firmware
 
-Visit the [**Web Flasher**](https://fchapleau.github.io/teams-redlight/) to flash your ESP32 directly from your browser using WebSerial.
+Use the included **Web Flasher** (`web/index.html`) to flash your ESP32 directly from your browser using WebSerial.
 
 **Requirements:**
 - Chrome or Edge browser (WebSerial support required)
@@ -181,8 +181,7 @@ Flash the debug firmware for detailed logging:
 
 **Build steps:**
 ```bash
-# Clone repository
-git clone https://github.com/fchapleau/teams-redlight.git
+# Navigate to project directory (assuming you have the source code)
 cd teams-redlight
 
 # Install PlatformIO
@@ -208,18 +207,16 @@ pio test
 │   └── index.html      # WebSerial-based flasher
 ├── test/               # Unit tests
 ├── docs/               # Additional documentation
-├── .github/workflows/  # CI/CD pipeline
 └── platformio.ini      # PlatformIO configuration
 ```
 
 ### Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
+1. Create a feature branch
+2. Make your changes
+3. Add tests for new functionality
+4. Ensure all tests pass
+5. Submit your changes
 
 ## Security Considerations
 
@@ -239,9 +236,9 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) file for 
 
 ## Support
 
-- **Issues**: Report bugs and feature requests on [GitHub Issues](https://github.com/fchapleau/teams-redlight/issues)
-- **Discussions**: Community support on [GitHub Discussions](https://github.com/fchapleau/teams-redlight/discussions)
-- **Wiki**: Additional documentation on [GitHub Wiki](https://github.com/fchapleau/teams-redlight/wiki)
+- **Documentation**: Check README.md and docs/ folder for help
+- **Serial Monitor**: Real-time debugging information via PlatformIO
+- **Community**: ESP32 and PlatformIO communities
 
 ## Acknowledgments
 

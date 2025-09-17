@@ -16,7 +16,7 @@ api.registry.platformio.org
 
 #### Option 1: Local Development
 1. **Use PlatformIO IDE:** Download and install PlatformIO IDE locally
-2. **Manual package installation:** Download packages manually from GitHub
+2. **Manual package installation:** Download packages manually from package registries
 3. **Offline development:** Work with cached packages
 
 #### Option 2: Network Configuration
@@ -39,31 +39,26 @@ If you have admin access to your network:
 2. **ESP-IDF:** Use Espressif's native development framework
 3. **Docker container:** Use a pre-configured development container
 
-### GitHub Actions / CI Pipeline Issues
+### Alternative Development Methods
 
-**Problem:** GitHub Actions failing due to network restrictions
+**Problem:** PlatformIO registry access issues
 
-**Solution:** The updated workflow now includes:
-- Network connectivity testing
-- Graceful fallback to mock builds
-- Separated validation from firmware compilation
-- Continue-on-error for network-dependent steps
+**Solution:** Multiple development approaches available:
+- Local PlatformIO installation with offline mode
+- Alternative build tools and IDEs
+- Manual library management
 
-#### Workflow Components:
+#### Development Options:
 
-1. **Validation Job** - Always runs:
+1. **Local Build Environment:**
    - Project structure validation
    - Code syntax checking
    - Documentation validation
    
-2. **Firmware Build Job** - Network dependent:
-   - Tests PlatformIO registry access
-   - Falls back to mock firmware if blocked
-   - Uses `continue-on-error` to prevent pipeline failure
-
-3. **Web Deployment** - Always runs:
-   - Deploys web flasher interface
-   - Works with or without firmware builds
+2. **Alternative Tools:**
+   - Arduino IDE with ESP32 support
+   - ESP-IDF native framework
+   - Manual compilation with GCC
 
 ## Runtime Issues
 
@@ -162,11 +157,10 @@ If you have admin access to your network:
 
 ### Building Firmware Locally
 
-If GitHub Actions can't build firmware due to network restrictions:
+To build firmware locally:
 
-1. **Clone repository locally:**
+1. **Navigate to project directory:**
    ```bash
-   git clone https://github.com/fchapleau/teams-redlight.git
    cd teams-redlight
    ```
 
@@ -275,14 +269,13 @@ When reporting issues, include:
 4. **Error logs:**
    - Serial monitor output
    - Browser console errors
-   - GitHub Actions logs
+   - Build output logs
 
 ### Support Channels
 
-- **GitHub Issues:** Report bugs and feature requests
-- **GitHub Discussions:** Community support and questions
 - **Serial Monitor:** Real-time debugging information
 - **Documentation:** Check README.md and docs/ folder
+- **Community Forums:** ESP32 and PlatformIO communities
 
 ### Diagnostic Commands
 
@@ -298,7 +291,7 @@ pio device monitor --baud 115200
 ping 8.8.8.8
 ```
 
-**Check GitHub Actions:**
-- View workflow runs in repository Actions tab
-- Download logs from failed runs
-- Check for DNS-related errors
+**Check Build Status:**
+- Review build output in terminal
+- Check for compilation errors
+- Verify library dependencies
