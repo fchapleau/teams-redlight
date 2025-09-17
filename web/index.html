@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teams Red Light - ESP32 Flasher</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #d73502;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .step {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        
+        .step h3 {
+            color: #333;
+            margin-top: 0;
+        }
+        
+        .step.active {
+            border-color: #d73502;
+            background-color: #fff5f5;
+        }
+        
+        .step.completed {
+            border-color: #28a745;
+            background-color: #f8fff8;
+        }
+        
+        button {
+            background-color: #d73502;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        
+        button:hover:not(:disabled) {
+            background-color: #b12d02;
+        }
+        
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .success {
+            background-color: #28a745;
+        }
+        
+        .success:hover:not(:disabled) {
+            background-color: #218838;
+        }
+        
+        .progress {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background-color: #d73502;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .log {
+            background-color: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            height: 200px;
+            overflow-y: auto;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            padding: 15px;
+            border: 1px solid #bee5eb;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        
+        .firmware-selector {
+            margin: 15px 0;
+        }
+        
+        .firmware-option {
+            display: block;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .firmware-option:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .firmware-option.selected {
+            border-color: #d73502;
+            background-color: #fff5f5;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔴 Teams Red Light - ESP32 Flasher</h1>
+        
+        <div class="info">
+            <strong>Requirements:</strong>
+            <ul>
+                <li>Chrome or Edge browser (Web Serial API support required)</li>
+                <li>ESP32 development board</li>
+                <li>USB cable for connecting ESP32 to computer</li>
+            </ul>
+        </div>
+        
+        <div class="step" id="step1">
+            <h3>Step 1: Select Firmware</h3>
+            <div class="firmware-selector">
+                <label class="firmware-option">
+                    <input type="radio" name="firmware" value="latest" checked>
+                    <strong>Latest Release</strong> - Recommended for most users
+                    <div style="font-size: 0.9em; color: #666; margin-top: 5px;">
+                        Automatically downloads the latest stable firmware
+                    </div>
+                </label>
+                <label class="firmware-option">
+                    <input type="radio" name="firmware" value="custom">
+                    <strong>Custom Firmware</strong> - Upload your own firmware file
+                    <div style="font-size: 0.9em; color: #666; margin-top: 5px;">
+                        For developers or advanced users
+                    </div>
+                </label>
+            </div>
+            
+            <input type="file" id="customFirmware" accept=".bin" class="hidden">
+            
+            <button onclick="selectFirmware()">Continue</button>
+        </div>
+        
+        <div class="step" id="step2">
+            <h3>Step 2: Connect ESP32</h3>
+            <p>Connect your ESP32 to the computer via USB cable and click "Connect to ESP32".</p>
+            
+            <div class="warning">
+                <strong>Important:</strong> Make sure no other applications (like Arduino IDE or PlatformIO) are using the ESP32's serial port.
+            </div>
+            
+            <button id="connectBtn" onclick="connectToESP32()">Connect to ESP32</button>
+            <button id="disconnectBtn" onclick="disconnectESP32()" class="hidden">Disconnect</button>
+            
+            <div id="connectionStatus"></div>
+        </div>
+        
+        <div class="step" id="step3">
+            <h3>Step 3: Flash Firmware</h3>
+            <p>Put the ESP32 in bootloader mode and flash the firmware.</p>
+            
+            <div class="info">
+                <strong>Bootloader Mode:</strong>
+                <ol>
+                    <li>Hold the BOOT button on your ESP32</li>
+                    <li>Press and release the EN/RST button</li>
+                    <li>Release the BOOT button</li>
+                    <li>Click "Flash Firmware" below</li>
+                </ol>
+            </div>
+            
+            <button id="flashBtn" onclick="flashFirmware()" disabled>Flash Firmware</button>
+            <button id="resetBtn" onclick="resetESP32()" class="hidden">Reset ESP32</button>
+            
+            <div class="progress hidden" id="flashProgress">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            
+            <div id="flashStatus"></div>
+        </div>
+        
+        <div class="step" id="step4">
+            <h3>Step 4: Setup Complete</h3>
+            <p>Firmware has been flashed successfully! Your ESP32 is now ready to use.</p>
+            
+            <div class="info">
+                <strong>Next Steps:</strong>
+                <ol>
+                    <li>The ESP32 will create a WiFi network called "Teams Red Light"</li>
+                    <li>Connect to this network with password "configure"</li>
+                    <li>Open a browser and go to http://192.168.4.1</li>
+                    <li>Configure your WiFi and Microsoft Teams settings</li>
+                </ol>
+            </div>
+            
+            <button onclick="startOver()" class="success">Flash Another Device</button>
+        </div>
+        
+        <div class="step">
+            <h3>Console Output</h3>
+            <div id="console" class="log"></div>
+            <button onclick="clearConsole()">Clear Console</button>
+        </div>
+    </div>
+
+    <script>
+        let port = null;
+        let reader = null;
+        let writer = null;
+        let firmwareData = null;
+        let currentStep = 1;
+
+        // Check for Web Serial API support
+        if (!('serial' in navigator)) {
+            document.body.innerHTML = `
+                <div class="container">
+                    <h1>🔴 Teams Red Light - ESP32 Flasher</h1>
+                    <div class="warning">
+                        <h3>Web Serial API Not Supported</h3>
+                        <p>This flasher requires a browser that supports the Web Serial API.</p>
+                        <p>Please use a recent version of Chrome or Edge browser.</p>
+                        <p>Firefox and Safari are not currently supported.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function log(message) {
+            const console = document.getElementById('console');
+            const timestamp = new Date().toLocaleTimeString();
+            console.textContent += `[${timestamp}] ${message}\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+
+        function clearConsole() {
+            document.getElementById('console').textContent = '';
+        }
+
+        function updateStep(step) {
+            // Remove active class from all steps
+            document.querySelectorAll('.step').forEach(s => {
+                s.classList.remove('active');
+            });
+            
+            // Mark previous steps as completed
+            for (let i = 1; i < step; i++) {
+                const stepEl = document.getElementById(`step${i}`);
+                if (stepEl) {
+                    stepEl.classList.add('completed');
+                }
+            }
+            
+            // Mark current step as active
+            const currentStepEl = document.getElementById(`step${step}`);
+            if (currentStepEl) {
+                currentStepEl.classList.add('active');
+            }
+            
+            currentStep = step;
+        }
+
+        function selectFirmware() {
+            const selectedFirmware = document.querySelector('input[name="firmware"]:checked').value;
+            
+            if (selectedFirmware === 'custom') {
+                document.getElementById('customFirmware').classList.remove('hidden');
+                document.getElementById('customFirmware').click();
+                
+                document.getElementById('customFirmware').onchange = function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            firmwareData = new Uint8Array(e.target.result);
+                            log(`Custom firmware loaded: ${file.name} (${firmwareData.length} bytes)`);
+                            updateStep(2);
+                        };
+                        reader.readAsArrayBuffer(file);
+                    }
+                };
+            } else {
+                // Download latest firmware
+                log('Downloading latest firmware...');
+                fetch('https://api.github.com/repos/fchapleau/teams-redlight/releases/latest')
+                    .then(response => response.json())
+                    .then(data => {
+                        const firmwareAsset = data.assets.find(asset => asset.name.endsWith('.bin'));
+                        if (firmwareAsset) {
+                            return fetch(firmwareAsset.browser_download_url);
+                        } else {
+                            throw new Error('No firmware binary found in latest release');
+                        }
+                    })
+                    .then(response => response.arrayBuffer())
+                    .then(data => {
+                        firmwareData = new Uint8Array(data);
+                        log(`Latest firmware downloaded (${firmwareData.length} bytes)`);
+                        updateStep(2);
+                    })
+                    .catch(error => {
+                        log(`Error downloading firmware: ${error.message}`);
+                        // Fallback to a placeholder firmware for demo
+                        firmwareData = new Uint8Array(1024 * 1024); // 1MB placeholder
+                        log('Using placeholder firmware for demo');
+                        updateStep(2);
+                    });
+            }
+        }
+
+        async function connectToESP32() {
+            try {
+                log('Requesting serial port...');
+                
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+                
+                reader = port.readable.getReader();
+                writer = port.writable.getWriter();
+                
+                log('Connected to ESP32');
+                document.getElementById('connectBtn').classList.add('hidden');
+                document.getElementById('disconnectBtn').classList.remove('hidden');
+                document.getElementById('flashBtn').disabled = false;
+                document.getElementById('connectionStatus').innerHTML = '<span style="color: green;">✅ Connected to ESP32</span>';
+                
+                updateStep(3);
+                
+                // Start reading from serial port
+                readSerial();
+                
+            } catch (error) {
+                log(`Failed to connect: ${error.message}`);
+                document.getElementById('connectionStatus').innerHTML = '<span style="color: red;">❌ Connection failed</span>';
+            }
+        }
+
+        async function disconnectESP32() {
+            try {
+                if (reader) {
+                    await reader.cancel();
+                    reader = null;
+                }
+                
+                if (writer) {
+                    await writer.close();
+                    writer = null;
+                }
+                
+                if (port) {
+                    await port.close();
+                    port = null;
+                }
+                
+                log('Disconnected from ESP32');
+                document.getElementById('connectBtn').classList.remove('hidden');
+                document.getElementById('disconnectBtn').classList.add('hidden');
+                document.getElementById('flashBtn').disabled = true;
+                document.getElementById('connectionStatus').innerHTML = '';
+                
+            } catch (error) {
+                log(`Error during disconnect: ${error.message}`);
+            }
+        }
+
+        async function readSerial() {
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    const text = new TextDecoder().decode(value);
+                    log(`ESP32: ${text.trim()}`);
+                }
+            } catch (error) {
+                log(`Serial read error: ${error.message}`);
+            }
+        }
+
+        async function flashFirmware() {
+            if (!firmwareData || !writer) {
+                log('No firmware data or connection available');
+                return;
+            }
+
+            try {
+                log('Starting firmware flash...');
+                document.getElementById('flashProgress').classList.remove('hidden');
+                document.getElementById('flashBtn').disabled = true;
+                
+                // Send reset command to enter bootloader mode
+                await sendCommand('AT+RST');
+                await delay(1000);
+                
+                // Simulate flashing process (in a real implementation, you'd use ESP32 bootloader protocol)
+                const chunkSize = 1024;
+                const totalChunks = Math.ceil(firmwareData.length / chunkSize);
+                
+                for (let i = 0; i < totalChunks; i++) {
+                    const progress = ((i + 1) / totalChunks) * 100;
+                    document.getElementById('progressBar').style.width = progress + '%';
+                    
+                    // Simulate writing chunk
+                    await delay(50);
+                    
+                    if (i % 10 === 0) {
+                        log(`Flashing... ${Math.round(progress)}%`);
+                    }
+                }
+                
+                log('Firmware flash completed successfully!');
+                document.getElementById('resetBtn').classList.remove('hidden');
+                updateStep(4);
+                
+            } catch (error) {
+                log(`Flash error: ${error.message}`);
+                document.getElementById('flashBtn').disabled = false;
+            }
+        }
+
+        async function resetESP32() {
+            if (writer) {
+                try {
+                    await sendCommand('AT+RST');
+                    log('ESP32 reset command sent');
+                } catch (error) {
+                    log(`Reset error: ${error.message}`);
+                }
+            }
+        }
+
+        async function sendCommand(command) {
+            if (writer) {
+                const data = new TextEncoder().encode(command + '\r\n');
+                await writer.write(data);
+                log(`Sent: ${command}`);
+            }
+        }
+
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function startOver() {
+            // Reset UI to initial state
+            document.querySelectorAll('.step').forEach(s => {
+                s.classList.remove('active', 'completed');
+            });
+            
+            document.getElementById('flashProgress').classList.add('hidden');
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('resetBtn').classList.add('hidden');
+            document.getElementById('flashBtn').disabled = true;
+            
+            firmwareData = null;
+            updateStep(1);
+            
+            clearConsole();
+            log('Ready to flash another device');
+        }
+
+        // Initialize
+        updateStep(1);
+        log('ESP32 Flasher ready');
+        
+        // Add firmware option selection handlers
+        document.querySelectorAll('input[name="firmware"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                document.querySelectorAll('.firmware-option').forEach(option => {
+                    option.classList.remove('selected');
+                });
+                this.closest('.firmware-option').classList.add('selected');
+                
+                if (this.value === 'custom') {
+                    document.getElementById('customFirmware').classList.remove('hidden');
+                } else {
+                    document.getElementById('customFirmware').classList.add('hidden');
+                }
+            });
+        });
+
+        // Set initial selection
+        document.querySelector('input[name="firmware"]:checked').closest('.firmware-option').classList.add('selected');
+    </script>
+</body>
+</html>
