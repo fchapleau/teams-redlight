@@ -196,7 +196,7 @@ jobs:
   # Web deployment job - deploys the web flasher as GitHub Pages default page
   deploy-web:
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [validate, build-firmware]
     # Only deploy to GitHub Pages from main branch or releases
     if: github.ref == 'refs/heads/main' || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     permissions:
@@ -212,6 +212,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Download firmware artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: firmware-build
+        path: firmware/
+      continue-on-error: true
+    
     - name: Prepare web files for Pages deployment
       run: |
         # Create a clean directory structure for Pages
@@ -219,6 +226,30 @@ jobs:
         
         # Copy the web flasher to be the default page
         cp web/index.html _site/index.html
+        
+        # Copy firmware binaries to serve from same origin (to avoid CORS)
+        if [ -d "firmware" ]; then
+          echo "📦 Copying firmware files to GitHub Pages to avoid CORS issues..."
+          mkdir -p _site/firmware
+          
+          # Copy firmware binaries if they exist
+          if [ -f "firmware/teams-redlight-firmware.bin" ]; then
+            cp firmware/teams-redlight-firmware.bin _site/firmware/
+            echo "✅ Copied production firmware ($(du -h firmware/teams-redlight-firmware.bin | cut -f1))"
+          fi
+          
+          if [ -f "firmware/teams-redlight-firmware-debug.bin" ]; then
+            cp firmware/teams-redlight-firmware-debug.bin _site/firmware/
+            echo "✅ Copied debug firmware ($(du -h firmware/teams-redlight-firmware-debug.bin | cut -f1))"
+          fi
+          
+          if [ -f "firmware/build-info.txt" ]; then
+            cp firmware/build-info.txt _site/firmware/
+            echo "✅ Copied build info"
+          fi
+        else
+          echo "⚠️  No firmware artifacts found - web flasher will fallback to placeholder firmware"
+        fi
         
         # Verify the files are ready
         if [ ! -f _site/index.html ]; then
@@ -228,8 +259,9 @@ jobs:
         
         echo "✅ Web flasher ready for deployment as default GitHub Pages"
         echo "📄 Web flasher will be available at: https://fchapleau.github.io/teams-redlight/"
+        echo "📦 Firmware will be served from same origin to avoid CORS issues"
         echo "📋 Files prepared:"
-        ls -la _site/
+        find _site -type f -exec ls -lh {} \;
     
     - name: Setup Pages
       uses: actions/configure-pages@v5
