@@ -11,8 +11,9 @@ void tearDown(void) {
 }
 
 void test_led_pin_setup() {
-    // Test that LED pin constant is defined
+    // Test that LED pin constants are defined
     TEST_ASSERT_NOT_EQUAL(0, LED_PIN);
+    TEST_ASSERT_NOT_EQUAL(0, LED_BUILTIN_PIN);
 }
 
 void test_wifi_ssid_constants() {

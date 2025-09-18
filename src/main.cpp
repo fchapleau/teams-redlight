@@ -35,6 +35,7 @@ String refreshToken;
 // Function declarations
 void setupLED();
 void updateLED();
+void setLEDState(int state);  // Helper function to control both LEDs
 void setupWiFiAP();
 void setupWiFiSTA();
 void setupWebServer();
@@ -135,10 +136,30 @@ void loop() {
 }
 
 void setupLED() {
-  LOG_DEBUGF("Configuring LED on pin %d", LED_PIN);
+  LOG_DEBUGF("Configuring external LED on pin %d", LED_PIN);
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  
+  // Setup onboard LED if it's on a different pin
+  if (LED_BUILTIN_PIN != LED_PIN) {
+    LOG_DEBUGF("Configuring onboard LED on pin %d", LED_BUILTIN_PIN);
+    pinMode(LED_BUILTIN_PIN, OUTPUT);
+  } else {
+    LOG_DEBUG("Onboard LED shares the same pin as external LED");
+  }
+  
+  // Initialize both LEDs to OFF state
+  setLEDState(LOW);
   LOG_DEBUG("LED setup complete");
+}
+
+void setLEDState(int state) {
+  // Control external LED
+  digitalWrite(LED_PIN, state);
+  
+  // Control onboard LED if it's on a different pin
+  if (LED_BUILTIN_PIN != LED_PIN) {
+    digitalWrite(LED_BUILTIN_PIN, state);
+  }
 }
 
 void updateLED() {
@@ -173,7 +194,7 @@ void updateLED() {
       switch (currentPresence) {
         case PRESENCE_IN_MEETING:
         case PRESENCE_BUSY:
-          digitalWrite(LED_PIN, HIGH); // Solid red
+          setLEDState(HIGH); // Solid red
           if (lastLoggedState != STATE_MONITORING) {
             LOG_INFOF("LED: Solid ON (presence: %s)", 
                      currentPresence == PRESENCE_IN_MEETING ? "In Meeting" : "Busy");
@@ -181,7 +202,7 @@ void updateLED() {
           }
           return;
         default:
-          digitalWrite(LED_PIN, LOW); // Off
+          setLEDState(LOW); // Off
           if (lastLoggedState != STATE_MONITORING) {
             LOG_DEBUG("LED: OFF (available/away/offline)");
             lastLoggedState = STATE_MONITORING;
@@ -200,7 +221,7 @@ void updateLED() {
   
   if (millis() - lastLedToggle > interval) {
     ledState = !ledState;
-    digitalWrite(LED_PIN, ledState ? HIGH : LOW);
+    setLEDState(ledState ? HIGH : LOW);
     lastLedToggle = millis();
   }
 }
