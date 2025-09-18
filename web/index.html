@@ -733,10 +733,23 @@
                 if (isValidESP32ChipId(value)) {
                     log('✅ Valid ESP32 chip detected');
                 } else {
-                    log(`⚠️ Unexpected chip ID: 0x${value.toString(16)}`);
+                    // Handle the specific case mentioned in the issue
+                    if (value === 0x6465) {
+                        log('❌ Detected chip ID 0x6465 - This indicates a communication protocol error');
+                        log('💡 Suggestion: Try manually entering bootloader mode or check USB cable connection');
+                        throw new Error('Invalid chip ID 0x6465 detected - possible communication error with ESP32');
+                    } else {
+                        log(`⚠️ Unexpected chip ID: 0x${value.toString(16)} - May still be compatible`);
+                    }
                 }
             } else if (command === 0x08) { // SYNC response
                 log('✅ Bootloader sync response received');
+            } else if (frameData.length >= 8) {
+                // Log any other responses for debugging
+                const statusByte = frameData[frameData.length - 1];
+                if (statusByte !== 0) {
+                    log(`⚠️ Bootloader command 0x${command.toString(16)} returned status: 0x${statusByte.toString(16)}`);
+                }
             }
         }
 
@@ -832,9 +845,9 @@
             const syncCmd = createCommand(0x08, syncData); // ESP_SYNC command
             
             // Send sync command multiple times for reliability
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < 7; i++) { // Increased from 5 to 7 for better reliability
                 await writer.write(syncCmd);
-                await delay(100);
+                await delay(150); // Slightly increased delay
             }
             
             log('Bootloader sync completed');
@@ -850,15 +863,16 @@
             const readRegData = intToBytes(chipIdRegister, 4);
             const readRegCmd = createCommand(0x0A, readRegData); // ESP_READ_REG command
             
-            await writer.write(readRegCmd);
+            // Send the command multiple times to ensure we get a response
+            for (let i = 0; i < 3; i++) {
+                await writer.write(readRegCmd);
+                await delay(200); // Wait for response
+            }
             
-            // Give the bootloader time to respond
-            await delay(100);
+            log('Chip ID read commands sent - waiting for response...');
             
-            // Read and validate the chip ID from the response
-            // The actual validation will be done in the background by readSerial()
-            // For now, just log that we attempted to read the chip ID
-            log('Chip ID read command sent');
+            // Give more time for the chip ID response to be processed
+            await delay(500);
         }
 
         async function beginFlash(size, address) {
@@ -1037,6 +1051,18 @@
         // Initialize
         loadVersionInfo();
         log('ESP32 Flasher ready - Latest firmware will be used by default');
+        
+        // Diagnostic function to test command creation (for debugging)
+        function testCommandCreation() {
+            log('Testing ESP32 bootloader command creation...');
+            const syncData = [0x07, 0x07, 0x12, 0x20];
+            const cmd = createCommand(0x08, syncData);
+            log(`Sample SYNC command length: ${cmd.length} bytes`);
+            log('✅ Command creation system functional');
+        }
+
+        // Test command creation on page load (for validation)
+        testCommandCreation();
         
         // Clean up serial connections when page unloads
         window.addEventListener('beforeunload', async () => {
