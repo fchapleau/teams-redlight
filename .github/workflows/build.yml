@@ -209,6 +209,45 @@ jobs:
         path: firmware/
       continue-on-error: true
     
+    - name: Download latest release assets (if available)
+      run: |
+        echo "📦 Attempting to download latest release assets..."
+        
+        # Get latest release info
+        LATEST_RELEASE=$(curl -s https://api.github.com/repos/fchapleau/teams-redlight/releases/latest)
+        
+        if [ $? -eq 0 ] && echo "$LATEST_RELEASE" | grep -q '"tag_name"'; then
+          echo "✅ Found latest release"
+          
+          # Create firmware directory if it doesn't exist
+          mkdir -p firmware/
+          
+          # Download firmware binaries from latest release
+          FIRMWARE_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*teams-redlight-firmware\.bin"' | cut -d'"' -f4)
+          DEBUG_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*teams-redlight-firmware-debug\.bin"' | cut -d'"' -f4)
+          INFO_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*build-info\.txt"' | cut -d'"' -f4)
+          
+          if [ ! -z "$FIRMWARE_URL" ]; then
+            echo "📥 Downloading production firmware from release..."
+            curl -L -o firmware/teams-redlight-firmware.bin "$FIRMWARE_URL"
+            echo "✅ Downloaded production firmware ($(du -h firmware/teams-redlight-firmware.bin | cut -f1))"
+          fi
+          
+          if [ ! -z "$DEBUG_URL" ]; then
+            echo "📥 Downloading debug firmware from release..."
+            curl -L -o firmware/teams-redlight-firmware-debug.bin "$DEBUG_URL"
+            echo "✅ Downloaded debug firmware ($(du -h firmware/teams-redlight-firmware-debug.bin | cut -f1))"
+          fi
+          
+          if [ ! -z "$INFO_URL" ]; then
+            echo "📥 Downloading build info from release..."
+            curl -L -o firmware/build-info.txt "$INFO_URL"
+            echo "✅ Downloaded build info"
+          fi
+        else
+          echo "⚠️  No latest release found or API request failed"
+        fi
+    
     - name: Prepare web files for Pages deployment
       run: |
         # Create a clean directory structure for Pages

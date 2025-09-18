@@ -1,44 +1,44 @@
 #!/bin/bash
 
-# Test to verify the specific CORS API fix implementation
+# Test to verify the simplified CORS fix implementation
 
-echo "Testing CORS API fix implementation..."
+echo "Testing simplified CORS fix implementation..."
 
-# Test 1: Check that web interface uses browser_download_url instead of api url
-echo "Test 1: Checking browser_download_url usage..."
-if grep -q "firmwareAsset.browser_download_url" web/index.html; then
-    echo "✅ Uses browser_download_url for direct download"
+# Test 1: Check that web interface only uses GitHub Pages firmware
+echo "Test 1: Checking GitHub Pages only firmware loading..."
+if grep -q "Loading firmware from GitHub Pages" web/index.html && ! grep -q "browser_download_url\|GitHub API" web/index.html; then
+    echo "✅ Uses GitHub Pages only for firmware loading"
 else
-    echo "❌ browser_download_url not found"
+    echo "❌ Still contains download fallback logic"
     exit 1
 fi
 
-# Test 2: Check that API URL with headers is not used
-echo "Test 2: Checking that API URL with headers is not used..."
-if grep -q "firmwareAsset.url" web/index.html; then
-    echo "❌ Still using problematic API URL"
-    exit 1
+# Test 2: Check that complex fallback logic is removed
+echo "Test 2: Checking complex fallback logic is removed..."
+if ! grep -q "firmwareAsset\|browser_download_url\|GitHub API" web/index.html; then
+    echo "✅ Complex fallback logic removed"
 else
-    echo "✅ API URL usage removed"
-fi
-
-# Test 3: Check that Accept header is not used (not needed for direct download)
-echo "Test 3: Checking that Accept header is removed..."
-if grep -q "Accept.*octet-stream" web/index.html; then
-    echo "❌ Still using Accept header for direct download"
-    exit 1
-else
-    echo "✅ Accept header properly removed"
-fi
-
-# Test 4: Check updated log messages
-echo "Test 4: Checking updated log messages..."
-if grep -q "from GitHub releases" web/index.html && ! grep -q "from GitHub API" web/index.html; then
-    echo "✅ Log messages updated correctly"
-else
-    echo "❌ Log messages not updated correctly"
+    echo "❌ Complex fallback logic still present"
     exit 1
 fi
 
-echo -e "\n🎉 All CORS API fix tests passed!"
-echo "The firmware download should now work without CORS errors."
+# Test 3: Check that CI/CD includes release asset download
+echo "Test 3: Checking CI/CD downloads release assets..."
+if grep -q "Download latest release assets" .github/workflows/build.yml; then
+    echo "✅ CI/CD downloads release assets for deployment"
+else
+    echo "❌ CI/CD release asset download not configured"
+    exit 1
+fi
+
+# Test 4: Check simplified error handling
+echo "Test 4: Checking simplified error handling..."
+if grep -q "Error loading firmware" web/index.html && grep -q "fallback placeholder firmware" web/index.html; then
+    echo "✅ Simplified error handling implemented"
+else
+    echo "❌ Simplified error handling not found"
+    exit 1
+fi
+
+echo -e "\n🎉 All simplified CORS fix tests passed!"
+echo "Firmware is now served directly from GitHub Pages without complex fallbacks."
