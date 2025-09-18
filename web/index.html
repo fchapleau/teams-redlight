@@ -562,16 +562,37 @@
 
         async function connectToESP32() {
             try {
+                // Check if already connected
+                if (port && port.readable) {
+                    log('Already connected to a serial port');
+                    return;
+                }
+                
+                // Ensure clean state before connecting
+                if (port) {
+                    await disconnectESP32();
+                }
+                
                 log('Requesting serial port...');
                 
                 port = await navigator.serial.requestPort();
-                // Use standard ESP32 baud rate for reliable connection
-                await port.open({ baudRate: 115200 });
+                
+                // Use standard ESP32 serial configuration
+                const serialOptions = {
+                    baudRate: 115200,
+                    dataBits: 8,
+                    stopBits: 1,
+                    parity: 'none',
+                    flowControl: 'none'
+                };
+                
+                log('Opening serial port with standard ESP32 configuration...');
+                await port.open(serialOptions);
                 
                 reader = port.readable.getReader();
                 writer = port.writable.getWriter();
                 
-                log('Connected to ESP32 at 115200 baud');
+                log('Connected to ESP32 at 115200 baud (8N1)');
                 document.getElementById('connectBtn').classList.add('hidden');
                 document.getElementById('disconnectBtn').classList.remove('hidden');
                 document.getElementById('flashBtn').disabled = false;
@@ -582,24 +603,49 @@
                 
             } catch (error) {
                 log(`Failed to connect: ${error.message}`);
-                document.getElementById('connectionStatus').innerHTML = '<div style="color: #d73502; margin: 10px 0;">❌ Connection failed: ' + error.message + '</div>';
+                
+                // Provide more specific error information
+                let errorDetail = '';
+                if (error.message.includes('Failed to open serial port')) {
+                    errorDetail = ' - Port may be in use by another application or driver issue';
+                } else if (error.message.includes('No port selected')) {
+                    errorDetail = ' - No serial port was selected';
+                }
+                
+                document.getElementById('connectionStatus').innerHTML = '<div style="color: #d73502; margin: 10px 0;">❌ Connection failed: ' + error.message + errorDetail + '</div>';
             }
         }
 
         async function disconnectESP32() {
             try {
+                log('Disconnecting from ESP32...');
+                
+                // Proper cleanup sequence to prevent port-in-use errors
                 if (reader) {
-                    await reader.cancel();
+                    try {
+                        await reader.cancel();
+                    } catch (e) {
+                        log(`Reader cancel error: ${e.message}`);
+                    }
+                    reader.releaseLock();
                     reader = null;
                 }
                 
                 if (writer) {
-                    await writer.close();
+                    try {
+                        await writer.close();
+                    } catch (e) {
+                        log(`Writer close error: ${e.message}`);
+                    }
                     writer = null;
                 }
                 
                 if (port) {
-                    await port.close();
+                    try {
+                        await port.close();
+                    } catch (e) {
+                        log(`Port close error: ${e.message}`);
+                    }
                     port = null;
                 }
                 
@@ -611,6 +657,10 @@
                 
             } catch (error) {
                 log(`Error during disconnect: ${error.message}`);
+                // Force cleanup even if there are errors
+                reader = null;
+                writer = null;
+                port = null;
             }
         }
 
@@ -733,6 +783,17 @@
         // Initialize
         loadVersionInfo();
         log('ESP32 Flasher ready - Latest firmware will be used by default');
+        
+        // Clean up serial connections when page unloads
+        window.addEventListener('beforeunload', async () => {
+            if (port) {
+                try {
+                    await disconnectESP32();
+                } catch (error) {
+                    console.log('Cleanup error:', error);
+                }
+            }
+        });
     </script>
 </body>
 </html>
