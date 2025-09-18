@@ -135,6 +135,8 @@ The device provides a comprehensive web interface for configuration:
 | Solid red | In meeting or busy status |
 | Off | Available, away, or offline |
 
+> **Note:** Both the external LED (on GPIO 2) and the ESP32's onboard LED will show the same status patterns simultaneously.
+
 ## Troubleshooting
 
 ### Common Issues
