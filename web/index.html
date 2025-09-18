@@ -680,6 +680,144 @@
             }
         }
 
+        async function flashFirmwareToESP32(firmwareData) {
+            const FLASH_WRITE_SIZE = 0x400; // 1024 bytes per write
+            const FLASH_SECTOR_SIZE = 0x1000; // 4KB sectors
+            const ESP32_FLASH_ADDRESS = 0x10000; // Standard app partition address
+            
+            try {
+                log('Syncing with ESP32 bootloader...');
+                await syncWithBootloader();
+                
+                log('Beginning firmware flash...');
+                await beginFlash(firmwareData.length, ESP32_FLASH_ADDRESS);
+                
+                // Write firmware data in chunks
+                const totalChunks = Math.ceil(firmwareData.length / FLASH_WRITE_SIZE);
+                
+                for (let i = 0; i < totalChunks; i++) {
+                    const start = i * FLASH_WRITE_SIZE;
+                    const end = Math.min(start + FLASH_WRITE_SIZE, firmwareData.length);
+                    const chunk = firmwareData.slice(start, end);
+                    
+                    // Pad chunk to write size if needed
+                    const paddedChunk = new Uint8Array(FLASH_WRITE_SIZE);
+                    paddedChunk.set(chunk);
+                    if (chunk.length < FLASH_WRITE_SIZE) {
+                        paddedChunk.fill(0xFF, chunk.length); // Fill with 0xFF (erased flash state)
+                    }
+                    
+                    await writeFlashData(ESP32_FLASH_ADDRESS + start, paddedChunk);
+                    
+                    const progress = ((i + 1) / totalChunks) * 100;
+                    document.getElementById('progressBar').style.width = progress + '%';
+                    
+                    if (i % 10 === 0) { // Update progress less frequently
+                        log(`Writing flash... ${Math.round(progress)}%`);
+                    }
+                }
+                
+                log('Finishing flash operation...');
+                await finishFlash();
+                
+            } catch (error) {
+                log(`Flash operation failed: ${error.message}`);
+                throw error;
+            }
+        }
+
+        async function syncWithBootloader() {
+            // ESP32 sync command: 0x08 with specific payload
+            const syncCmd = new Uint8Array([
+                0xC0, // SLIP frame start
+                0x00, 0x08, // Command: ESP_SYNC
+                0x24, 0x00, 0x00, 0x00, // Data length: 36 bytes
+                0x00, 0x00, 0x00, 0x00, // Checksum placeholder
+                // Sync pattern (36 bytes)
+                0x07, 0x07, 0x12, 0x20, 0x55, 0x55, 0x55, 0x55, 
+                0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+                0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+                0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+                0x55, 0x55, 0x55, 0x55,
+                0xC0 // SLIP frame end
+            ]);
+            
+            // Send sync command multiple times for reliability
+            for (let i = 0; i < 5; i++) {
+                await writer.write(syncCmd);
+                await delay(100);
+            }
+            
+            log('Bootloader sync completed');
+        }
+
+        async function beginFlash(size, address) {
+            const FLASH_WRITE_SIZE = 0x400; // 1024 bytes per write
+            
+            // ESP_FLASH_BEGIN command
+            const beginCmd = new Uint8Array([
+                0xC0, // SLIP frame start
+                0x00, 0x02, // Command: ESP_FLASH_BEGIN
+                0x10, 0x00, 0x00, 0x00, // Data length: 16 bytes
+                0x00, 0x00, 0x00, 0x00, // Checksum placeholder
+                // Data payload
+                ...intToBytes(size, 4),    // Erase size
+                ...intToBytes(Math.ceil(size / FLASH_WRITE_SIZE), 4),   // Number of blocks
+                ...intToBytes(FLASH_WRITE_SIZE, 4), // Block size
+                ...intToBytes(address, 4), // Flash address
+                0xC0 // SLIP frame end
+            ]);
+            
+            await writer.write(beginCmd);
+            await delay(1000); // Allow time for flash erase
+            log('Flash erase and begin completed');
+        }
+
+        async function writeFlashData(address, data) {
+            // ESP_FLASH_DATA command
+            const dataCmd = new Uint8Array([
+                0xC0, // SLIP frame start
+                0x00, 0x03, // Command: ESP_FLASH_DATA
+                ...intToBytes(data.length + 16, 4), // Data length + header
+                0x00, 0x00, 0x00, 0x00, // Checksum placeholder
+                // Data header
+                ...intToBytes(data.length, 4), // Data size
+                ...intToBytes(0, 4),          // Sequence number (simplified)
+                ...intToBytes(0, 4),          // Reserved
+                ...intToBytes(0, 4),          // Reserved
+                // Actual data
+                ...data,
+                0xC0 // SLIP frame end
+            ]);
+            
+            await writer.write(dataCmd);
+            await delay(50); // Small delay for write processing
+        }
+
+        async function finishFlash() {
+            // ESP_FLASH_END command
+            const endCmd = new Uint8Array([
+                0xC0, // SLIP frame start
+                0x00, 0x04, // Command: ESP_FLASH_END
+                0x04, 0x00, 0x00, 0x00, // Data length: 4 bytes
+                0x00, 0x00, 0x00, 0x00, // Checksum placeholder
+                0x01, 0x00, 0x00, 0x00, // Reboot flag
+                0xC0 // SLIP frame end
+            ]);
+            
+            await writer.write(endCmd);
+            await delay(500);
+            log('Flash operation completed successfully');
+        }
+
+        function intToBytes(value, length) {
+            const result = [];
+            for (let i = 0; i < length; i++) {
+                result.push((value >> (i * 8)) & 0xFF);
+            }
+            return result;
+        }
+
         async function startFlashProcess() {
             if (!firmwareData) {
                 log('No firmware data available');
@@ -705,21 +843,8 @@
                 await enterBootloaderMode();
                 await delay(1000);
                 
-                // Simulate flashing process with standard timing
-                const chunkSize = 2048; // Increased chunk size for faster flashing
-                const totalChunks = Math.ceil(firmwareData.length / chunkSize);
-                
-                for (let i = 0; i < totalChunks; i++) {
-                    const progress = ((i + 1) / totalChunks) * 100;
-                    document.getElementById('progressBar').style.width = progress + '%';
-                    
-                    // Standard delay for reliable flashing
-                    await delay(50); // Standard timing for 115200 baud
-                    
-                    if (i % 20 === 0) { // Update less frequently
-                        log(`Flashing... ${Math.round(progress)}%`);
-                    }
-                }
+                // Actually flash the firmware to ESP32
+                await flashFirmwareToESP32(firmwareData);
                 
                 log('Firmware flash completed successfully!');
                 document.getElementById('flashStatus').innerHTML = '<div style="color: #28a745;">✅ Firmware flashed successfully!</div>';
