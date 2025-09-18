@@ -239,6 +239,43 @@ If GitHub Actions can't build firmware due to network restrictions:
 2. Use the validation script: `./test/validate.sh`
 3. Check includes and function definitions
 
+## Web Interface Issues
+
+### CORS Policy Errors
+
+**Problem:** Firmware download fails with CORS policy error when accessing GitHub Pages
+```
+Access to fetch at 'https://release-assets.githubusercontent.com/...' from origin 'https://fchapleau.github.io' has been blocked by CORS policy
+```
+
+**Solution:** This issue has been resolved in the latest version by:
+1. **Primary method:** Serving firmware files from GitHub Pages (same origin)
+2. **Fallback method:** Using `browser_download_url` instead of API URLs for direct downloads
+
+**If you still experience CORS errors:**
+1. **Clear browser cache** and reload the page
+2. **Check firmware availability** - ensure the latest release includes firmware files
+3. **Verify deployment** - check that GitHub Pages deployment completed successfully
+4. **Try alternative browser** - use Chrome or Edge for best WebSerial support
+
+### WebSerial API Not Supported
+
+**Problem:** Browser displays "Web Serial API Not Supported" message
+
+**Solution:**
+- Use Chrome 89+ or Edge 89+ (WebSerial requirement)
+- Firefox and Safari are not currently supported
+- Ensure site is served over HTTPS (required for WebSerial)
+
+### Firmware Download Timeout
+
+**Problem:** Firmware download takes too long or times out
+
+**Solutions:**
+1. **Check network connection** - ensure stable internet connectivity
+2. **Try smaller firmware** - debug builds are larger than production builds
+3. **Use local firmware** - upload custom firmware file instead of downloading
+
 ## Corporate Environment Considerations
 
 ### Firewall Rules
