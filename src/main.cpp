@@ -75,6 +75,7 @@ void setup() {
 }
 
 void loop() {
+  server.handleClient();  // Handle incoming HTTP requests
   updateLED();
   
   // Handle different states
@@ -168,6 +169,13 @@ void setupWiFiAP() {
   currentState = STATE_AP_MODE;
   
   WiFi.mode(WIFI_AP);
+  
+  // Configure AP with custom IP in 172.16.0.0/12 range
+  IPAddress local_IP(172, 16, 4, 1);      // Gateway IP
+  IPAddress gateway(172, 16, 4, 1);       // Gateway IP  
+  IPAddress subnet(255, 240, 0, 0);       // Subnet mask for /12
+  
+  WiFi.softAPConfig(local_IP, gateway, subnet);
   WiFi.softAP(AP_SSID, AP_PASSWORD);
   
   IPAddress IP = WiFi.softAPIP();
@@ -313,7 +321,7 @@ void handleRoot() {
 </html>
   )";
   
-  request->send(200, "text/html", html);
+  server.send(200, "text/html", html);
 }
 
 void handleConfig() {
@@ -413,7 +421,7 @@ void handleConfig() {
 </html>
   )";
   
-  request->send(200, "text/html", html);
+  server.send(200, "text/html", html);
 }
 
 void handleSave(AsyncWebServerRequest *request) {
