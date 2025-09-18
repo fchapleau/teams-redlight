@@ -457,6 +457,8 @@
                 `;
                 // Fallback firmware
                 firmwareData = new Uint8Array(1024 * 1024); // 1MB placeholder
+                isCustomFirmware = false;
+                log('Fallback firmware initialized (1MB placeholder)');
             }
         }
 
@@ -515,18 +517,82 @@
             }
         }
 
+        async function enterBootloaderMode() {
+            if (!port) {
+                throw new Error('No serial port connected');
+            }
+            
+            try {
+                // ESP32 bootloader entry sequence:
+                // 1. Set DTR and RTS high (ESP32 running)
+                // 2. Set DTR low (EN/RESET low - ESP32 in reset)
+                // 3. Set RTS low (IO0 low - boot mode)
+                // 4. Set DTR high (EN/RESET high - ESP32 starts in download mode)
+                // 5. Set RTS high (IO0 high - normal operation)
+                
+                log('Setting DTR and RTS signals for bootloader mode...');
+                
+                // Step 1: Both high (normal operation)
+                await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                await delay(100);
+                
+                // Step 2: DTR low (reset ESP32)
+                await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+                await delay(100);
+                
+                // Step 3: RTS low (set boot mode)
+                await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+                await delay(100);
+                
+                // Step 4: DTR high (release reset in boot mode)
+                await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+                await delay(100);
+                
+                // Step 5: RTS high (normal IO0 operation)
+                await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                await delay(500);
+                
+                log('ESP32 should now be in bootloader mode');
+                
+            } catch (error) {
+                log(`Bootloader mode entry failed: ${error.message}`);
+                throw error;
+            }
+        }
+
         async function connectToESP32() {
             try {
+                // Check if already connected
+                if (port && port.readable) {
+                    log('Already connected to a serial port');
+                    return;
+                }
+                
+                // Ensure clean state before connecting
+                if (port) {
+                    await disconnectESP32();
+                }
+                
                 log('Requesting serial port...');
                 
                 port = await navigator.serial.requestPort();
-                // Use maximum viable baud rate for ESP32
-                await port.open({ baudRate: 3000000 });
+                
+                // Use standard ESP32 serial configuration
+                const serialOptions = {
+                    baudRate: 115200,
+                    dataBits: 8,
+                    stopBits: 1,
+                    parity: 'none',
+                    flowControl: 'none'
+                };
+                
+                log('Opening serial port with standard ESP32 configuration...');
+                await port.open(serialOptions);
                 
                 reader = port.readable.getReader();
                 writer = port.writable.getWriter();
                 
-                log('Connected to ESP32 at 3M baud (maximum viable speed)');
+                log('Connected to ESP32 at 115200 baud (8N1)');
                 document.getElementById('connectBtn').classList.add('hidden');
                 document.getElementById('disconnectBtn').classList.remove('hidden');
                 document.getElementById('flashBtn').disabled = false;
@@ -537,24 +603,49 @@
                 
             } catch (error) {
                 log(`Failed to connect: ${error.message}`);
-                document.getElementById('connectionStatus').innerHTML = '<div style="color: #d73502; margin: 10px 0;">❌ Connection failed: ' + error.message + '</div>';
+                
+                // Provide more specific error information
+                let errorDetail = '';
+                if (error.message.includes('Failed to open serial port')) {
+                    errorDetail = ' - Port may be in use by another application or driver issue';
+                } else if (error.message.includes('No port selected')) {
+                    errorDetail = ' - No serial port was selected';
+                }
+                
+                document.getElementById('connectionStatus').innerHTML = '<div style="color: #d73502; margin: 10px 0;">❌ Connection failed: ' + error.message + errorDetail + '</div>';
             }
         }
 
         async function disconnectESP32() {
             try {
+                log('Disconnecting from ESP32...');
+                
+                // Proper cleanup sequence to prevent port-in-use errors
                 if (reader) {
-                    await reader.cancel();
+                    try {
+                        await reader.cancel();
+                    } catch (e) {
+                        log(`Reader cancel error: ${e.message}`);
+                    }
+                    reader.releaseLock();
                     reader = null;
                 }
                 
                 if (writer) {
-                    await writer.close();
+                    try {
+                        await writer.close();
+                    } catch (e) {
+                        log(`Writer close error: ${e.message}`);
+                    }
                     writer = null;
                 }
                 
                 if (port) {
-                    await port.close();
+                    try {
+                        await port.close();
+                    } catch (e) {
+                        log(`Port close error: ${e.message}`);
+                    }
                     port = null;
                 }
                 
@@ -566,6 +657,10 @@
                 
             } catch (error) {
                 log(`Error during disconnect: ${error.message}`);
+                // Force cleanup even if there are errors
+                reader = null;
+                writer = null;
+                port = null;
             }
         }
 
@@ -603,11 +698,12 @@
                 document.getElementById('flashBtn').disabled = true;
                 document.getElementById('flashStatus').innerHTML = '<div style="color: #0066cc;">🔄 Flashing firmware...</div>';
                 
-                // Send reset command to enter bootloader mode
-                await sendCommand('AT+RST');
+                // Enter ESP32 bootloader mode using DTR/RTS signals
+                log('Entering ESP32 bootloader mode...');
+                await enterBootloaderMode();
                 await delay(1000);
                 
-                // Simulate flashing process with faster speed (simulate the 3M baud rate improvement)
+                // Simulate flashing process with standard timing
                 const chunkSize = 2048; // Increased chunk size for faster flashing
                 const totalChunks = Math.ceil(firmwareData.length / chunkSize);
                 
@@ -615,8 +711,8 @@
                     const progress = ((i + 1) / totalChunks) * 100;
                     document.getElementById('progressBar').style.width = progress + '%';
                     
-                    // Faster delay to simulate improved speed
-                    await delay(25); // Reduced from 50ms to 25ms
+                    // Standard delay for reliable flashing
+                    await delay(50); // Standard timing for 115200 baud
                     
                     if (i % 20 === 0) { // Update less frequently
                         log(`Flashing... ${Math.round(progress)}%`);
@@ -639,10 +735,14 @@
         }
 
         async function resetESP32() {
-            if (writer) {
+            if (port) {
                 try {
-                    await sendCommand('AT+RST');
-                    log('ESP32 reset command sent');
+                    log('Resetting ESP32 using DTR signal...');
+                    // Reset ESP32 by toggling DTR (EN/RESET line)
+                    await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+                    await delay(100);
+                    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                    log('ESP32 reset signal sent');
                 } catch (error) {
                     log(`Reset error: ${error.message}`);
                 }
@@ -683,6 +783,17 @@
         // Initialize
         loadVersionInfo();
         log('ESP32 Flasher ready - Latest firmware will be used by default');
+        
+        // Clean up serial connections when page unloads
+        window.addEventListener('beforeunload', async () => {
+            if (port) {
+                try {
+                    await disconnectESP32();
+                } catch (error) {
+                    console.log('Cleanup error:', error);
+                }
+            }
+        });
     </script>
 </body>
 </html>
