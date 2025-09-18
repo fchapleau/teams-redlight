@@ -226,6 +226,7 @@ jobs:
         fi
         
         echo "✅ Web files ready for deployment"
+        echo "📄 Web flasher will be available at: https://fchapleau.github.io/teams-redlight/"
         ls -la build/web/
     
     - name: Deploy to GitHub Pages
@@ -233,12 +234,15 @@ jobs:
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: build/web
+        force_orphan: true
         
   # Release creation job
   create-release:
     runs-on: ubuntu-latest
     needs: [validate, build-firmware]
     if: github.event_name == 'release'
+    permissions:
+      contents: write
     
     steps:
     - uses: actions/checkout@v4
@@ -250,13 +254,32 @@ jobs:
         path: release/
       continue-on-error: true
     
+    - name: Prepare release files
+      run: |
+        # Show what files will be released
+        echo "Files available for release:"
+        ls -la release/ || echo "No release directory found"
+        
+        if [ -f "release/teams-redlight-firmware.bin" ]; then
+          echo "✅ teams-redlight-firmware.bin"
+        else
+          echo "⚠️  teams-redlight-firmware.bin (missing - will not be included)"
+        fi
+        if [ -f "release/teams-redlight-firmware-debug.bin" ]; then
+          echo "✅ teams-redlight-firmware-debug.bin"
+        else
+          echo "⚠️  teams-redlight-firmware-debug.bin (missing - will not be included)"
+        fi
+        if [ -f "release/build-info.txt" ]; then
+          echo "✅ build-info.txt"
+        else
+          echo "⚠️  build-info.txt (missing - will not be included)"
+        fi
+    
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          release/teams-redlight-firmware.bin
-          release/teams-redlight-firmware-debug.bin
-          release/build-info.txt
+        files: release/*
         body: |
           ## 🔴 Teams Red Light Firmware Release
           
