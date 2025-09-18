@@ -517,18 +517,61 @@
             }
         }
 
+        async function enterBootloaderMode() {
+            if (!port) {
+                throw new Error('No serial port connected');
+            }
+            
+            try {
+                // ESP32 bootloader entry sequence:
+                // 1. Set DTR and RTS high (ESP32 running)
+                // 2. Set DTR low (EN/RESET low - ESP32 in reset)
+                // 3. Set RTS low (IO0 low - boot mode)
+                // 4. Set DTR high (EN/RESET high - ESP32 starts in download mode)
+                // 5. Set RTS high (IO0 high - normal operation)
+                
+                log('Setting DTR and RTS signals for bootloader mode...');
+                
+                // Step 1: Both high (normal operation)
+                await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                await delay(100);
+                
+                // Step 2: DTR low (reset ESP32)
+                await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+                await delay(100);
+                
+                // Step 3: RTS low (set boot mode)
+                await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+                await delay(100);
+                
+                // Step 4: DTR high (release reset in boot mode)
+                await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+                await delay(100);
+                
+                // Step 5: RTS high (normal IO0 operation)
+                await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                await delay(500);
+                
+                log('ESP32 should now be in bootloader mode');
+                
+            } catch (error) {
+                log(`Bootloader mode entry failed: ${error.message}`);
+                throw error;
+            }
+        }
+
         async function connectToESP32() {
             try {
                 log('Requesting serial port...');
                 
                 port = await navigator.serial.requestPort();
-                // Use maximum viable baud rate for ESP32
-                await port.open({ baudRate: 3000000 });
+                // Use standard ESP32 baud rate for reliable connection
+                await port.open({ baudRate: 115200 });
                 
                 reader = port.readable.getReader();
                 writer = port.writable.getWriter();
                 
-                log('Connected to ESP32 at 3M baud (maximum viable speed)');
+                log('Connected to ESP32 at 115200 baud');
                 document.getElementById('connectBtn').classList.add('hidden');
                 document.getElementById('disconnectBtn').classList.remove('hidden');
                 document.getElementById('flashBtn').disabled = false;
@@ -605,11 +648,12 @@
                 document.getElementById('flashBtn').disabled = true;
                 document.getElementById('flashStatus').innerHTML = '<div style="color: #0066cc;">🔄 Flashing firmware...</div>';
                 
-                // Send reset command to enter bootloader mode
-                await sendCommand('AT+RST');
+                // Enter ESP32 bootloader mode using DTR/RTS signals
+                log('Entering ESP32 bootloader mode...');
+                await enterBootloaderMode();
                 await delay(1000);
                 
-                // Simulate flashing process with faster speed (simulate the 3M baud rate improvement)
+                // Simulate flashing process with standard timing
                 const chunkSize = 2048; // Increased chunk size for faster flashing
                 const totalChunks = Math.ceil(firmwareData.length / chunkSize);
                 
@@ -617,8 +661,8 @@
                     const progress = ((i + 1) / totalChunks) * 100;
                     document.getElementById('progressBar').style.width = progress + '%';
                     
-                    // Faster delay to simulate improved speed
-                    await delay(25); // Reduced from 50ms to 25ms
+                    // Standard delay for reliable flashing
+                    await delay(50); // Standard timing for 115200 baud
                     
                     if (i % 20 === 0) { // Update less frequently
                         log(`Flashing... ${Math.round(progress)}%`);
@@ -641,10 +685,14 @@
         }
 
         async function resetESP32() {
-            if (writer) {
+            if (port) {
                 try {
-                    await sendCommand('AT+RST');
-                    log('ESP32 reset command sent');
+                    log('Resetting ESP32 using DTR signal...');
+                    // Reset ESP32 by toggling DTR (EN/RESET line)
+                    await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+                    await delay(100);
+                    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                    log('ESP32 reset signal sent');
                 } catch (error) {
                     log(`Reset error: ${error.message}`);
                 }
