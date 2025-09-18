@@ -8,7 +8,11 @@
 
 // LED Configuration
 #define LED_PIN 2                        // External LED pin
-#define LED_BUILTIN_PIN 2               // Onboard LED pin (typically same as external on ESP32-DevKitC)
+#ifndef LED_BUILTIN
+  #define LED_BUILTIN_PIN 2             // Onboard LED pin (fallback if not defined by board)
+#else
+  #define LED_BUILTIN_PIN LED_BUILTIN   // Use Arduino framework's built-in LED pin
+#endif
 #define LED_SLOW_BLINK_INTERVAL 1000    // 1 second - no network
 #define LED_FAST_BLINK_INTERVAL 200     // 200ms - connecting to O365
 #define LED_VERY_FAST_BLINK_INTERVAL 100 // 100ms - AP mode

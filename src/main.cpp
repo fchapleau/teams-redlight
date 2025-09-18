@@ -143,6 +143,7 @@ void setupLED() {
   if (LED_BUILTIN_PIN != LED_PIN) {
     LOG_DEBUGF("Configuring onboard LED on pin %d", LED_BUILTIN_PIN);
     pinMode(LED_BUILTIN_PIN, OUTPUT);
+    LOG_DEBUG("Both external and onboard LEDs will be synchronized");
   } else {
     LOG_DEBUG("Onboard LED shares the same pin as external LED");
   }
