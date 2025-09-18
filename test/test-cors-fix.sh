@@ -13,12 +13,12 @@ else
     exit 1
 fi
 
-# Test 2: Check for fallback to GitHub releases
-echo "Test 2: Checking fallback to GitHub releases..."
-if grep -q "trying GitHub releases" web/index.html; then
-    echo "✅ Fallback to GitHub releases implemented"
+# Test 2: Check that CI/CD downloads release assets for GitHub Pages
+echo "Test 2: Checking CI/CD downloads release assets..."
+if grep -q "Download latest release assets" .github/workflows/build.yml; then
+    echo "✅ CI/CD downloads release assets for GitHub Pages"
 else
-    echo "❌ Fallback to GitHub releases not found"
+    echo "❌ CI/CD release asset download not found"
     exit 1
 fi
 

@@ -466,43 +466,20 @@
             if (!latestVersion) return;
             
             try {
-                log('Pre-loading latest firmware...');
+                log('Loading firmware from GitHub Pages (same origin)...');
                 
-                // First try to fetch from GitHub Pages (same origin) to avoid CORS
-                try {
-                    log('Attempting to fetch firmware from GitHub Pages (same origin)...');
-                    const response = await fetch('./firmware/teams-redlight-firmware.bin');
-                    if (response.ok) {
-                        const data = await response.arrayBuffer();
-                        firmwareData = new Uint8Array(data);
-                        isCustomFirmware = false;
-                        log(`Latest firmware pre-loaded from GitHub Pages (${firmwareData.length} bytes)`);
-                        return;
-                    } else {
-                        log(`GitHub Pages firmware not available (${response.status}), trying GitHub releases...`);
-                    }
-                } catch (pagesError) {
-                    log(`GitHub Pages firmware fetch failed: ${pagesError.message}, trying GitHub releases...`);
-                }
-                
-                // Fallback to GitHub API for asset download
-                const firmwareAsset = latestVersion.assets.find(asset => asset.name.endsWith('.bin') && !asset.name.includes('debug'));
-                if (firmwareAsset) {
-                    log('Attempting to fetch firmware from GitHub API...');
-                    const response = await fetch(firmwareAsset.url, {
-                        headers: {
-                            'Accept': 'application/octet-stream'
-                        }
-                    });
+                // Fetch firmware from GitHub Pages (same origin) - no CORS issues
+                const response = await fetch('./firmware/teams-redlight-firmware.bin');
+                if (response.ok) {
                     const data = await response.arrayBuffer();
                     firmwareData = new Uint8Array(data);
                     isCustomFirmware = false;
-                    log(`Latest firmware pre-loaded from GitHub API (${firmwareData.length} bytes)`);
+                    log(`Latest firmware loaded from GitHub Pages (${firmwareData.length} bytes)`);
                 } else {
-                    throw new Error('No firmware binary found in latest release');
+                    throw new Error(`Firmware not available (${response.status})`);
                 }
             } catch (error) {
-                log(`Error downloading firmware: ${error.message}`);
+                log(`Error loading firmware: ${error.message}`);
                 log('Using fallback placeholder firmware');
                 // Fallback to placeholder firmware
                 firmwareData = new Uint8Array(1024 * 1024); // 1MB placeholder
