@@ -485,19 +485,15 @@
                     log(`GitHub Pages firmware fetch failed: ${pagesError.message}, trying GitHub releases...`);
                 }
                 
-                // Fallback to GitHub API for asset download
+                // Fallback to GitHub releases browser download (avoids CORS)
                 const firmwareAsset = latestVersion.assets.find(asset => asset.name.endsWith('.bin') && !asset.name.includes('debug'));
                 if (firmwareAsset) {
-                    log('Attempting to fetch firmware from GitHub API...');
-                    const response = await fetch(firmwareAsset.url, {
-                        headers: {
-                            'Accept': 'application/octet-stream'
-                        }
-                    });
+                    log('Attempting to fetch firmware from GitHub releases...');
+                    const response = await fetch(firmwareAsset.browser_download_url);
                     const data = await response.arrayBuffer();
                     firmwareData = new Uint8Array(data);
                     isCustomFirmware = false;
-                    log(`Latest firmware pre-loaded from GitHub API (${firmwareData.length} bytes)`);
+                    log(`Latest firmware pre-loaded from GitHub releases (${firmwareData.length} bytes)`);
                 } else {
                     throw new Error('No firmware binary found in latest release');
                 }
