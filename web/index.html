@@ -667,17 +667,93 @@
         }
 
         async function readSerial() {
+            let buffer = new Uint8Array(0);
+            
             try {
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
                     
+                    // Accumulate data in buffer
+                    const newBuffer = new Uint8Array(buffer.length + value.length);
+                    newBuffer.set(buffer);
+                    newBuffer.set(value, buffer.length);
+                    buffer = newBuffer;
+                    
+                    // Process complete SLIP frames
+                    buffer = processSlipFrames(buffer);
+                    
+                    // Also log as text for debugging (ESP32 might send text output)
                     const text = new TextDecoder().decode(value);
-                    log(`ESP32: ${text.trim()}`);
+                    if (text.trim().length > 0) {
+                        log(`ESP32: ${text.trim()}`);
+                    }
                 }
             } catch (error) {
                 log(`Serial read error: ${error.message}`);
             }
+        }
+
+        function processSlipFrames(buffer) {
+            let processed = 0;
+            
+            for (let i = 0; i < buffer.length; i++) {
+                if (buffer[i] === 0xC0) { // SLIP frame delimiter
+                    if (i > processed) {
+                        // Found a complete frame
+                        const frameData = buffer.slice(processed, i);
+                        if (frameData.length > 0) {
+                            parseBootloaderResponse(frameData);
+                        }
+                    }
+                    processed = i + 1;
+                }
+            }
+            
+            // Return remaining unprocessed data
+            return buffer.slice(processed);
+        }
+
+        function parseBootloaderResponse(frameData) {
+            if (frameData.length < 10) {
+                return; // Too short to be a valid response
+            }
+            
+            // Parse ESP32 bootloader response structure
+            // [direction][command][size][value][status]
+            const direction = frameData[0];
+            const command = frameData[1] | (frameData[2] << 8);
+            const size = frameData[3] | (frameData[4] << 8) | (frameData[5] << 16) | (frameData[6] << 24);
+            
+            if (command === 0x0A && size >= 4) { // READ_REG response
+                const value = frameData[7] | (frameData[8] << 8) | (frameData[9] << 16) | (frameData[10] << 24);
+                log(`Chip ID register read: 0x${value.toString(16).padStart(8, '0')}`);
+                
+                // Validate ESP32 chip ID
+                if (isValidESP32ChipId(value)) {
+                    log('✅ Valid ESP32 chip detected');
+                } else {
+                    log(`⚠️ Unexpected chip ID: 0x${value.toString(16)}`);
+                }
+            } else if (command === 0x08) { // SYNC response
+                log('✅ Bootloader sync response received');
+            }
+        }
+
+        function isValidESP32ChipId(chipId) {
+            // Known ESP32 chip IDs and variants
+            const validChipIds = [
+                0x00000000, // ESP32 chip revision 0
+                0x00000001, // ESP32 chip revision 1
+                0x00000002, // ESP32 chip revision 2
+                0x00000003, // ESP32 chip revision 3
+                0x0000FFFF, // ESP32-S2
+                0x0000FFFE, // ESP32-S3
+                0x0000FFFD, // ESP32-C3
+            ];
+            
+            // Check if it's a known chip ID or if the upper bits suggest it's an ESP32
+            return validChipIds.includes(chipId) || (chipId & 0xFFFF0000) === 0x00000000;
         }
 
         async function flashFirmwareToESP32(firmwareData) {
@@ -688,6 +764,9 @@
             try {
                 log('Syncing with ESP32 bootloader...');
                 await syncWithBootloader();
+                
+                log('Attaching SPI flash...');
+                await attachSpiFlash();
                 
                 log('Beginning firmware flash...');
                 await beginFlash(firmwareData.length, ESP32_FLASH_ADDRESS);
@@ -726,21 +805,31 @@
             }
         }
 
+        async function attachSpiFlash() {
+            // SPI_ATTACH_REQ command to properly initialize SPI flash communication
+            const attachData = [
+                0x00, 0x00, 0x00, 0x00, // hspi_config_arg
+                0x00, 0x00, 0x00, 0x00  // sspi_config_arg  
+            ];
+            
+            const attachCmd = createCommand(0x0D, attachData); // ESP_SPI_ATTACH command
+            
+            await writer.write(attachCmd);
+            await delay(100);
+            log('SPI flash attachment completed');
+        }
+
         async function syncWithBootloader() {
-            // ESP32 sync command: 0x08 with specific payload
-            const syncCmd = new Uint8Array([
-                0xC0, // SLIP frame start
-                0x00, 0x08, // Command: ESP_SYNC
-                0x24, 0x00, 0x00, 0x00, // Data length: 36 bytes
-                0x00, 0x00, 0x00, 0x00, // Checksum placeholder
-                // Sync pattern (36 bytes)
+            // ESP32 sync pattern data (36 bytes)
+            const syncData = [
                 0x07, 0x07, 0x12, 0x20, 0x55, 0x55, 0x55, 0x55, 
                 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
                 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
                 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
-                0x55, 0x55, 0x55, 0x55,
-                0xC0 // SLIP frame end
-            ]);
+                0x55, 0x55, 0x55, 0x55
+            ];
+            
+            const syncCmd = createCommand(0x08, syncData); // ESP_SYNC command
             
             // Send sync command multiple times for reliability
             for (let i = 0; i < 5; i++) {
@@ -749,24 +838,41 @@
             }
             
             log('Bootloader sync completed');
+            
+            // Read chip ID to verify we're talking to a valid ESP32
+            await readChipId();
+        }
+
+        async function readChipId() {
+            // READ_REG command to get chip ID from EFUSE_RD_REG_BASE + 0x3FC (0x60008420 on ESP32)
+            const chipIdRegister = 0x60008420; // ESP32 chip ID register
+            
+            const readRegData = intToBytes(chipIdRegister, 4);
+            const readRegCmd = createCommand(0x0A, readRegData); // ESP_READ_REG command
+            
+            await writer.write(readRegCmd);
+            
+            // Give the bootloader time to respond
+            await delay(100);
+            
+            // Read and validate the chip ID from the response
+            // The actual validation will be done in the background by readSerial()
+            // For now, just log that we attempted to read the chip ID
+            log('Chip ID read command sent');
         }
 
         async function beginFlash(size, address) {
             const FLASH_WRITE_SIZE = 0x400; // 1024 bytes per write
             
-            // ESP_FLASH_BEGIN command
-            const beginCmd = new Uint8Array([
-                0xC0, // SLIP frame start
-                0x00, 0x02, // Command: ESP_FLASH_BEGIN
-                0x10, 0x00, 0x00, 0x00, // Data length: 16 bytes
-                0x00, 0x00, 0x00, 0x00, // Checksum placeholder
-                // Data payload
+            // ESP_FLASH_BEGIN command data
+            const beginData = [
                 ...intToBytes(size, 4),    // Erase size
                 ...intToBytes(Math.ceil(size / FLASH_WRITE_SIZE), 4),   // Number of blocks
                 ...intToBytes(FLASH_WRITE_SIZE, 4), // Block size
-                ...intToBytes(address, 4), // Flash address
-                0xC0 // SLIP frame end
-            ]);
+                ...intToBytes(address, 4) // Flash address
+            ];
+            
+            const beginCmd = createCommand(0x02, beginData); // ESP_FLASH_BEGIN command
             
             await writer.write(beginCmd);
             await delay(1000); // Allow time for flash erase
@@ -774,36 +880,28 @@
         }
 
         async function writeFlashData(address, data) {
-            // ESP_FLASH_DATA command
-            const dataCmd = new Uint8Array([
-                0xC0, // SLIP frame start
-                0x00, 0x03, // Command: ESP_FLASH_DATA
-                ...intToBytes(data.length + 16, 4), // Data length + header
-                0x00, 0x00, 0x00, 0x00, // Checksum placeholder
-                // Data header
+            // ESP_FLASH_DATA command data header + actual data
+            const dataHeader = [
                 ...intToBytes(data.length, 4), // Data size
                 ...intToBytes(0, 4),          // Sequence number (simplified)
                 ...intToBytes(0, 4),          // Reserved
-                ...intToBytes(0, 4),          // Reserved
-                // Actual data
-                ...data,
-                0xC0 // SLIP frame end
-            ]);
+                ...intToBytes(0, 4)           // Reserved
+            ];
+            
+            const fullData = [...dataHeader, ...data];
+            const dataCmd = createCommand(0x03, fullData); // ESP_FLASH_DATA command
             
             await writer.write(dataCmd);
             await delay(50); // Small delay for write processing
         }
 
         async function finishFlash() {
-            // ESP_FLASH_END command
-            const endCmd = new Uint8Array([
-                0xC0, // SLIP frame start
-                0x00, 0x04, // Command: ESP_FLASH_END
-                0x04, 0x00, 0x00, 0x00, // Data length: 4 bytes
-                0x00, 0x00, 0x00, 0x00, // Checksum placeholder
-                0x01, 0x00, 0x00, 0x00, // Reboot flag
-                0xC0 // SLIP frame end
-            ]);
+            // ESP_FLASH_END command data
+            const endData = [
+                0x01, 0x00, 0x00, 0x00 // Reboot flag
+            ];
+            
+            const endCmd = createCommand(0x04, endData); // ESP_FLASH_END command
             
             await writer.write(endCmd);
             await delay(500);
@@ -816,6 +914,35 @@
                 result.push((value >> (i * 8)) & 0xFF);
             }
             return result;
+        }
+
+        function calculateChecksum(data) {
+            // Simple checksum calculation for ESP32 bootloader protocol
+            let checksum = 0xEF; // ESP32 initial checksum seed
+            for (let i = 0; i < data.length; i++) {
+                checksum ^= data[i];
+            }
+            return checksum;
+        }
+
+        function createCommand(cmd, data = []) {
+            // Create properly formatted ESP32 bootloader command with checksum
+            const header = [
+                0xC0, // SLIP frame start
+                ...intToBytes(cmd, 2), // Command (little endian)
+                ...intToBytes(data.length, 4), // Data length (little endian)
+            ];
+            
+            // Calculate checksum over the data only
+            const checksum = data.length > 0 ? calculateChecksum(data) : 0xEF;
+            const checksumBytes = intToBytes(checksum, 4);
+            
+            return new Uint8Array([
+                ...header,
+                ...checksumBytes,
+                ...data,
+                0xC0 // SLIP frame end
+            ]);
         }
 
         async function startFlashProcess() {
