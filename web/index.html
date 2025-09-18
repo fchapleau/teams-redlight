@@ -520,13 +520,13 @@
                 log('Requesting serial port...');
                 
                 port = await navigator.serial.requestPort();
-                // Use maximum safe baud rate for ESP32
-                await port.open({ baudRate: 1500000 });
+                // Use maximum viable baud rate for ESP32
+                await port.open({ baudRate: 3000000 });
                 
                 reader = port.readable.getReader();
                 writer = port.writable.getWriter();
                 
-                log('Connected to ESP32 at 1.5M baud');
+                log('Connected to ESP32 at 3M baud (maximum viable speed)');
                 document.getElementById('connectBtn').classList.add('hidden');
                 document.getElementById('disconnectBtn').classList.remove('hidden');
                 document.getElementById('flashBtn').disabled = false;
@@ -607,7 +607,7 @@
                 await sendCommand('AT+RST');
                 await delay(1000);
                 
-                // Simulate flashing process with faster speed (simulate the 1.5M baud rate improvement)
+                // Simulate flashing process with faster speed (simulate the 3M baud rate improvement)
                 const chunkSize = 2048; // Increased chunk size for faster flashing
                 const totalChunks = Math.ceil(firmwareData.length / chunkSize);
                 
