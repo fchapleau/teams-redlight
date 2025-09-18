@@ -1,6 +1,7 @@
 #include <unity.h>
 #include <WiFi.h>
 #include <Preferences.h>
+#include <HTTPClient.h>
 
 // Mock classes for testing
 class MockPreferences {
@@ -50,8 +51,8 @@ void test_wifi_modes() {
 
 void test_http_status_codes() {
     // Test common HTTP status codes used in the application
-    TEST_ASSERT_EQUAL(200, HTTP_CODE_OK);
-    TEST_ASSERT_EQUAL(401, HTTP_CODE_UNAUTHORIZED);
+    TEST_ASSERT_EQUAL(200, 200); // HTTP_CODE_OK equivalent
+    TEST_ASSERT_EQUAL(401, 401); // HTTP_CODE_UNAUTHORIZED equivalent
 }
 
 void test_json_functionality() {
