@@ -144,22 +144,12 @@ jobs:
         pio run -e esp32dev || echo "Build failed - may be due to network restrictions"
         pio run -e esp32dev_debug || echo "Debug build failed - may be due to network restrictions"
     
-    - name: Create Mock Firmware (fallback)
+    - name: Skip firmware build (PlatformIO not accessible)
       if: env.PLATFORMIO_ACCESSIBLE == 'false'
       run: |
-        echo "Creating mock firmware files for demonstration..."
-        mkdir -p .pio/build/esp32dev
-        mkdir -p .pio/build/esp32dev_debug
-        
-        # Create mock firmware files with realistic headers
-        echo -e "\\xE9\\x02\\x02\\x20" > .pio/build/esp32dev/firmware.bin
-        echo "Teams Red Light ESP32 Firmware - Mock Build $(date)" >> .pio/build/esp32dev/firmware.bin
-        dd if=/dev/urandom bs=1024 count=512 >> .pio/build/esp32dev/firmware.bin 2>/dev/null
-        
-        cp .pio/build/esp32dev/firmware.bin .pio/build/esp32dev_debug/firmware.bin
-        echo "Debug symbols and extra logging enabled" >> .pio/build/esp32dev_debug/firmware.bin
-        
-        echo "Mock firmware files created"
+        echo "Skipping firmware build - PlatformIO registry not accessible"
+        echo "Only real firmware should be built, not mock/demonstration files"
+        echo "Web flasher will use in-memory placeholder for demonstration purposes"
     
     - name: Prepare release files
       run: |
