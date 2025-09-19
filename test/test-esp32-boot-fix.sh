@@ -137,12 +137,13 @@ else
     exit 1
 fi
 
-# Test 8: Check firmware version has been updated
-echo "Test 8: Checking firmware version updated..."
-if grep -q '"version": "1.0.8"' web/manifest.json; then
-    echo "✅ Firmware version updated to 1.0.8"
+# Test 8: Check firmware version format (GitVersion semantic versioning)
+echo "Test 8: Checking firmware version format..."
+if grep -qE '"version": "[0-9]+\.[0-9]+\.[0-9]+"' web/manifest.json; then
+    VERSION=$(grep '"version"' web/manifest.json | cut -d'"' -f4)
+    echo "✅ Firmware version follows semantic versioning: $VERSION"
 else
-    echo "❌ Firmware version not updated"
+    echo "❌ Firmware version not in semantic versioning format"
     exit 1
 fi
 
