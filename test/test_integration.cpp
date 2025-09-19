@@ -113,8 +113,8 @@ void test_https_configuration() {
     TEST_ASSERT_EQUAL(80, 80);   // HTTP_PORT
     TEST_ASSERT_EQUAL(443, 443); // HTTPS_PORT
     
-    // Test HTTPS is enabled in configuration
-    TEST_ASSERT_TRUE(true); // HTTPS support is available
+    // Test HTTPS is always enabled
+    TEST_ASSERT_TRUE(true); // HTTPS support is always available
 }
 
 void setup() {

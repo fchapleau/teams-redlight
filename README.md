@@ -69,12 +69,11 @@ ESP32 Development Board
 
 1. **Power on the ESP32** - The LED will blink very fast indicating configuration mode
 2. **Connect to WiFi network** named "Teams Red Light" (password: "configure")
-3. **Open browser** and go to http://192.168.4.1 (or https://192.168.4.1 for secure access)
+3. **Open browser** and go to http://192.168.4.1 or https://192.168.4.1 (secure access is always available)
 4. **Configure your settings:**
    - WiFi network credentials
    - Microsoft Teams/Office 365 settings
    - Azure AD application credentials
-   - Security settings (enable HTTPS if desired)
 
 ### 4. Microsoft Azure AD Setup
 
@@ -230,22 +229,21 @@ pio test
 - **Access tokens** are refreshed automatically
 - **Network traffic** uses HTTPS for Microsoft Graph API
 - **Local web interface** supports both HTTP and HTTPS
-- **HTTPS support** with self-signed certificates for secure local access
+- **HTTPS always enabled** with self-signed certificates for secure local access
 
 ### HTTPS Configuration
 
-The device now supports HTTPS alongside the standard HTTP interface:
+The device automatically provides secure HTTPS access alongside the standard HTTP interface:
 
-- **HTTP**: Port 80 (default, always available)
-- **HTTPS**: Port 443 (optional, configurable)
+- **HTTP**: Port 80 (always available for compatibility)
+- **HTTPS**: Port 443 (always enabled for security)
 - **Self-signed certificates**: Automatically generated and stored in flash
 - **Security**: HTTPS protects configuration data in transit on your local network
 
-To enable HTTPS:
-1. Access the configuration page
-2. Check "Enable HTTPS (Port 443)" in Security Settings
-3. Save configuration and restart the device
-4. Access via `https://[device-ip]` (you may need to accept the self-signed certificate)
+HTTPS is always enabled and cannot be disabled. The device will:
+1. Automatically generate self-signed certificates on first boot
+2. Start the HTTPS server on port 443
+3. Accept secure connections at `https://[device-ip]` (you may need to accept the self-signed certificate)
 
 For production use, consider:
 - Using certificate-based authentication instead of client secrets

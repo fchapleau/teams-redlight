@@ -38,7 +38,7 @@ String refreshToken;
 
 // SSL Configuration variables
 #if ENABLE_HTTPS
-bool httpsEnabled = false;
+bool httpsEnabled = true;  // HTTPS is always enabled
 String sslCertificate;
 String sslPrivateKey;
 #endif
@@ -111,9 +111,7 @@ void loop() {
   server.handleClient();  // Handle incoming HTTP requests
   
 #if ENABLE_HTTPS
-  if (httpsEnabled) {
-    handleHTTPSClient();  // Handle incoming HTTPS requests
-  }
+  handleHTTPSClient();  // Handle incoming HTTPS requests (always enabled)
 #endif
   
   updateLED();
@@ -388,16 +386,12 @@ void setupWebServer() {
   if (currentState == STATE_AP_MODE) {
     LOG_INFO("Access configuration at: http://192.168.4.1");
 #if ENABLE_HTTPS
-    if (httpsEnabled) {
-      LOG_INFO("Secure access at: https://192.168.4.1");
-    }
+    LOG_INFO("Secure access at: https://192.168.4.1");
 #endif
   } else {
     LOG_INFOF("Access configuration at: http://%s", WiFi.localIP().toString().c_str());
 #if ENABLE_HTTPS
-    if (httpsEnabled) {
-      LOG_INFOF("Secure access at: https://%s", WiFi.localIP().toString().c_str());
-    }
+    LOG_INFOF("Secure access at: https://%s", WiFi.localIP().toString().c_str());
 #endif
   }
 }
@@ -546,11 +540,8 @@ void handleConfig() {
             <div class="section">
                 <h3>Security Settings</h3>
                 <div class="form-group">
-                    <label>
-                        <input type="checkbox" id="enable_https" name="enable_https")" + String(httpsEnabled ? " checked" : "") + R"(>
-                        Enable HTTPS (Port 443)
-                    </label>
-                    <div class="help">Enable secure HTTPS access with self-signed certificate</div>
+                    <p>🔒 HTTPS is always enabled for secure access on port 443.</p>
+                    <div class="help">Self-signed certificates are automatically generated and stored.</div>
                 </div>
             </div>
 #endif
@@ -655,24 +646,8 @@ void handleSave() {
   }
   
 #if ENABLE_HTTPS
-  // Save HTTPS configuration
-  if (server.hasArg("enable_https")) {
-    bool newHttpsEnabled = server.arg("enable_https") == "on";
-    if (newHttpsEnabled != httpsEnabled) {
-      LOG_INFOF("HTTPS enabled changed to: %s", newHttpsEnabled ? "true" : "false");
-      httpsEnabled = newHttpsEnabled;
-      preferences.putBool(KEY_SSL_ENABLED, httpsEnabled);
-      configChanged = true;
-    }
-  } else {
-    // Checkbox not checked means disabled
-    if (httpsEnabled) {
-      LOG_INFO("HTTPS disabled");
-      httpsEnabled = false;
-      preferences.putBool(KEY_SSL_ENABLED, httpsEnabled);
-      configChanged = true;
-    }
-  }
+  // HTTPS is always enabled - no configuration needed
+  LOG_DEBUG("HTTPS is always enabled");
 #endif
   
   if (configChanged) {
@@ -766,7 +741,7 @@ void handleStatus() {
   doc["uptime"] = millis() / 1000;
   
 #if ENABLE_HTTPS
-  doc["https_enabled"] = httpsEnabled;
+  doc["https_enabled"] = true;  // HTTPS is always enabled
   doc["https_available"] = true;
 #else
   doc["https_available"] = false;
@@ -1108,8 +1083,8 @@ void loadConfiguration() {
   tokenExpires = preferences.getULong64(KEY_TOKEN_EXPIRES, 0);
   
 #if ENABLE_HTTPS
-  // Load SSL configuration
-  httpsEnabled = preferences.getBool(KEY_SSL_ENABLED, true);  // Enable HTTPS by default
+  // Load SSL configuration - HTTPS is always enabled
+  httpsEnabled = true;  // SSL is always on
   sslCertificate = preferences.getString(KEY_SSL_CERT, "");
   sslPrivateKey = preferences.getString(KEY_SSL_KEY, "");
 #endif
@@ -1125,7 +1100,7 @@ void loadConfiguration() {
   LOG_INFOF("Refresh Token: %s", refreshToken.length() > 0 ? "(available)" : "(not available)");
   
 #if ENABLE_HTTPS
-  LOG_INFOF("HTTPS Enabled: %s", httpsEnabled ? "Yes" : "No");
+  LOG_INFO("HTTPS Enabled: Always (SSL always on)");
   LOG_INFOF("SSL Certificate: %s", sslCertificate.length() > 0 ? "(configured)" : "(not configured)");
   LOG_INFOF("SSL Private Key: %s", sslPrivateKey.length() > 0 ? "(configured)" : "(not configured)");
 #endif
@@ -1156,8 +1131,7 @@ void saveConfiguration() {
   preferences.putULong64(KEY_TOKEN_EXPIRES, tokenExpires);
   
 #if ENABLE_HTTPS
-  // Save SSL configuration
-  preferences.putBool(KEY_SSL_ENABLED, httpsEnabled);
+  // Save SSL configuration (HTTPS is always enabled)
   preferences.putString(KEY_SSL_CERT, sslCertificate);
   preferences.putString(KEY_SSL_KEY, sslPrivateKey);
 #endif
@@ -1209,11 +1183,6 @@ o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V
 }
 
 void setupHTTPS() {
-  if (!httpsEnabled) {
-    LOG_INFO("HTTPS is disabled, skipping setup");
-    return;
-  }
-  
   LOG_INFO("Setting up HTTPS server...");
   
   // Generate self-signed certificate if not configured
