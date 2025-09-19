@@ -1,0 +1,18 @@
+{
+  "name": "Teams Red Light",
+  "version": "1.0.5",
+  "home_assistant_domain": "teams_red_light",
+  "funding_url": "https://github.com/fchapleau/teams-redlight",
+  "new_install_skip_erase": false,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        { 
+          "path": "firmware/teams-redlight-firmware.bin", 
+          "offset": 65536 
+        }
+      ]
+    }
+  ]
+}
