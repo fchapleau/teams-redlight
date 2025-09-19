@@ -17,27 +17,36 @@ import sys
 import shutil
 from pathlib import Path
 
+# For PlatformIO
+Import("env")
+
 def extract_firmware_components(source, target, env):
     """
     Post-build script to extract ESP32 firmware components for web flashing
     """
-    print("Extracting ESP32 firmware components for web flashing...")
+    print("🔧 Extracting ESP32 firmware components for web flashing...")
+    print(f"Source: {source}")
+    print(f"Target: {target}")
     
     # Get directories
     build_dir = Path(env.subst("$BUILD_DIR"))
     project_dir = Path(env.subst("$PROJECT_DIR"))
     platform_dir = Path(env.subst("$PLATFORMIO_CORE_DIR")) / "packages"
     
+    print(f"Build dir: {build_dir}")
+    print(f"Project dir: {project_dir}")
+    
     # Output directory
     firmware_dir = project_dir / "firmware"
     firmware_dir.mkdir(exist_ok=True)
+    print(f"Firmware output dir: {firmware_dir}")
     
     # 1. Copy application firmware
     app_bin = build_dir / "firmware.bin"
     if app_bin.exists():
         target_app = firmware_dir / "teams-redlight-firmware.bin"
         shutil.copy2(app_bin, target_app)
-        print(f"✅ Copied application firmware: {target_app}")
+        print(f"✅ Copied application firmware: {target_app} ({app_bin.stat().st_size:,} bytes)")
     else:
         print(f"❌ Application firmware not found: {app_bin}")
         return
@@ -47,7 +56,7 @@ def extract_firmware_components(source, target, env):
     if bootloader_bin.exists():
         target_bootloader = firmware_dir / "bootloader_dio_40m.bin"
         shutil.copy2(bootloader_bin, target_bootloader)
-        print(f"✅ Copied bootloader: {target_bootloader}")
+        print(f"✅ Copied bootloader: {target_bootloader} ({bootloader_bin.stat().st_size:,} bytes)")
     else:
         # Try to find a generic ESP32 bootloader
         print("⚠️  Bootloader not found in build - creating placeholder")
@@ -64,7 +73,7 @@ def extract_firmware_components(source, target, env):
     if partitions_bin.exists():
         target_partitions = firmware_dir / "partitions.bin"
         shutil.copy2(partitions_bin, target_partitions)
-        print(f"✅ Copied partition table: {target_partitions}")
+        print(f"✅ Copied partition table: {target_partitions} ({partitions_bin.stat().st_size:,} bytes)")
     else:
         print("⚠️  Partition table not found - creating default")
         # Create a minimal partition table
@@ -85,17 +94,28 @@ def extract_firmware_components(source, target, env):
         # boot_app0.bin tells ESP32 which app partition to boot
         # 0xf0f0f0f0 means boot from factory app partition
         f.write(b'\xf0\xf0\xf0\xf0' + b'\xff' * 4092)
-    print(f"✅ Created boot_app0.bin: {boot_app0}")
+    print(f"✅ Created boot_app0.bin: {boot_app0} (4,096 bytes)")
     
     # List all firmware components
     print("\n📦 Firmware components ready for ESP Web Tools:")
     for component in firmware_dir.glob("*.bin"):
         size = component.stat().st_size
         print(f"   {component.name}: {size:,} bytes")
+    
+    print("✅ Firmware extraction completed successfully!")
 
 # This function is called by PlatformIO after build
 def post_build(source, target, env):
-    extract_firmware_components(source, target, env)
+    try:
+        extract_firmware_components(source, target, env)
+    except Exception as e:
+        print(f"❌ Error in post-build script: {e}")
+        import traceback
+        traceback.print_exc()
+
+# Register the callback for PlatformIO
+env.AddPostAction("buildprog", post_build)
 
 if __name__ == "__main__":
     print("This script is called by PlatformIO during build")
+    print("To test manually, use: pio run -e esp32dev_web")
