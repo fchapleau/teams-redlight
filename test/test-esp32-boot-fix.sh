@@ -139,8 +139,8 @@ fi
 
 # Test 8: Check firmware version has been updated
 echo "Test 8: Checking firmware version updated..."
-if grep -q '"version": "1.0.6"' web/manifest.json; then
-    echo "✅ Firmware version updated to 1.0.6"
+if grep -q '"version": "1.0.8"' web/manifest.json; then
+    echo "✅ Firmware version updated to 1.0.8"
 else
     echo "❌ Firmware version not updated"
     exit 1
