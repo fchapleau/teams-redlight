@@ -3,9 +3,8 @@
 #include <WebServer.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
-#if ENABLE_HTTPS
-#include <WiFiServerSecure.h>
-#endif
+#include <ESPAsyncWebServer.h>
+#include <AsyncTCP.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <Update.h>
@@ -15,7 +14,7 @@
 // Global objects
 WebServer server(HTTP_PORT);
 #if ENABLE_HTTPS
-WiFiServerSecure httpsServer(HTTPS_PORT);
+AsyncWebServer httpsServer(HTTPS_PORT);
 #endif
 Preferences preferences;
 WiFiClientSecure client;
@@ -54,11 +53,10 @@ void setupWiFiSTA();
 void setupWebServer();
 #if ENABLE_HTTPS
 void setupHTTPS();
-void handleHTTPSClient();
 void generateSelfSignedCert();
-String generateRootPage();
-String generateConfigPage();
-String generateStatusResponse();
+String generateHTTPSRootPage();
+String generateHTTPSConfigPage();
+String generateHTTPSStatusResponse();
 #endif
 void handleRoot();
 void handleConfig();
@@ -111,10 +109,6 @@ void setup() {
 
 void loop() {
   server.handleClient();  // Handle incoming HTTP requests
-  
-#if ENABLE_HTTPS
-  handleHTTPSClient();  // Handle incoming HTTPS requests (always enabled)
-#endif
   
   updateLED();
   
@@ -1185,9 +1179,10 @@ o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V
 }
 
 void setupHTTPS() {
-  LOG_INFO("Setting up HTTPS server...");
+  LOG_INFO("Setting up HTTPS server using ESPAsyncWebServer...");
+  LOG_WARN("Note: SSL support requires AsyncTCP with SSL enabled. Currently running HTTP on HTTPS port.");
   
-  // Generate self-signed certificate if not configured
+  // Generate self-signed certificate if not configured (for future SSL implementation)
   if (sslCertificate.length() == 0 || sslPrivateKey.length() == 0) {
     generateSelfSignedCert();
     // Save the generated certificate
@@ -1195,103 +1190,111 @@ void setupHTTPS() {
     preferences.putString(KEY_SSL_KEY, sslPrivateKey);
   }
   
-  // Configure SSL certificates for the HTTPS server
-  httpsServer.loadCertificate(sslCertificate.c_str());
-  httpsServer.loadPrivateKey(sslPrivateKey.c_str());
+  // Configure HTTPS routes - mirror the HTTP routes
+  httpsServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    LOG_DEBUG("Serving AsyncWebServer root page");
+    String html = generateHTTPSRootPage();
+    request->send(200, "text/html", html);
+  });
   
-  // Start HTTPS server
+  httpsServer.on("/config", HTTP_GET, [](AsyncWebServerRequest *request){
+    LOG_DEBUG("Serving AsyncWebServer config page");
+    String html = generateHTTPSConfigPage();
+    request->send(200, "text/html", html);
+  });
+  
+  httpsServer.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){
+    LOG_DEBUG("Serving AsyncWebServer status API request");
+    String json = generateHTTPSStatusResponse();
+    request->send(200, "application/json", json);
+  });
+  
+  httpsServer.on("/save", HTTP_POST, [](AsyncWebServerRequest *request){
+    LOG_INFO("Processing AsyncWebServer configuration save request");
+    // Handle form data
+    if (request->hasParam("ssid", true)) {
+      wifiSSID = request->getParam("ssid", true)->value();
+    }
+    if (request->hasParam("password", true)) {
+      wifiPassword = request->getParam("password", true)->value();
+    }
+    if (request->hasParam("client_id", true)) {
+      clientId = request->getParam("client_id", true)->value();
+    }
+    if (request->hasParam("client_secret", true)) {
+      clientSecret = request->getParam("client_secret", true)->value();
+    }
+    if (request->hasParam("tenant_id", true)) {
+      tenantId = request->getParam("tenant_id", true)->value();
+    }
+    if (request->hasParam("user_email", true)) {
+      userEmail = request->getParam("user_email", true)->value();
+    }
+    
+    // Save configuration
+    saveConfiguration();
+    
+    request->send(200, "text/html", R"(
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Configuration Saved</title>
+    <meta http-equiv="refresh" content="3;url=/">
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+        .message { background-color: #d4edda; color: #155724; padding: 20px; border-radius: 5px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="message">
+        <h2>✅ Configuration Saved!</h2>
+        <p>Device will restart to apply changes.</p>
+        <p>You will be redirected in 3 seconds.</p>
+    </div>
+</body>
+</html>
+    )");
+    
+    LOG_WARN("Restarting device to apply new configuration...");
+    delay(1000);
+    ESP.restart();
+  });
+  
+  httpsServer.on("/restart", HTTP_POST, [](AsyncWebServerRequest *request){
+    LOG_WARN("Device restart requested via AsyncWebServer interface");
+    request->send(200, "text/plain", "Restarting...");
+    delay(1000);
+    ESP.restart();
+  });
+  
+  // Start the server without SSL (HTTP on HTTPS port)
+  // Note: To enable SSL, AsyncTCP would need to be compiled with SSL support
+  // For true HTTPS, consider using libraries like:
+  // - ESP32HTTPSServer
+  // - or compile AsyncTCP with SSL flags
   httpsServer.begin();
-  LOG_INFOF("HTTPS server started on port %d", HTTPS_PORT);
+  LOG_INFOF("AsyncWebServer started on port %d (HTTP, SSL pending AsyncTCP SSL support)", HTTPS_PORT);
   
   if (currentState == STATE_AP_MODE) {
-    LOG_INFO("Access configuration at: https://192.168.4.1");
+    LOG_INFO("AsyncWebServer access at: http://192.168.4.1:443");
   } else {
-    LOG_INFOF("Access configuration at: https://%s", WiFi.localIP().toString().c_str());
+    LOG_INFOF("AsyncWebServer access at: http://%s:443", WiFi.localIP().toString().c_str());
   }
 }
 
-void handleHTTPSClient() {
-  WiFiClientSecure client = httpsServer.available();
-  
-  if (client) {
-    LOG_DEBUG("HTTPS client connected");
-    
-    // Read the request line by line
-    String request = "";
-    String method = "";
-    String path = "";
-    String line = "";
-    
-    // Read request line
-    if (client.available()) {
-      line = client.readStringUntil('\n');
-      line.trim();
-      
-      // Parse HTTP method and path
-      int firstSpace = line.indexOf(' ');
-      int secondSpace = line.indexOf(' ', firstSpace + 1);
-      
-      if (firstSpace > 0 && secondSpace > firstSpace) {
-        method = line.substring(0, firstSpace);
-        path = line.substring(firstSpace + 1, secondSpace);
-      }
-    }
-    
-    // Read remaining headers (skip for simplicity)
-    while (client.available()) {
-      line = client.readStringUntil('\n');
-      line.trim();
-      if (line.length() == 0) break; // Empty line indicates end of headers
-    }
-    
-    LOG_DEBUGF("HTTPS %s request to: %s", method.c_str(), path.c_str());
-    
-    // Route the request
-    String response = "";
-    String contentType = "text/html";
-    
-    if (path == "/" || path == "/index.html") {
-      response = generateRootPage();
-    } else if (path == "/config") {
-      response = generateConfigPage();
-    } else if (path == "/status") {
-      response = generateStatusResponse();
-      contentType = "application/json";
-    } else {
-      // 404 Not Found
-      response = "<!DOCTYPE html><html><head><title>404 Not Found</title></head>";
-      response += "<body><h1>404 - Page Not Found</h1>";
-      response += "<p>The requested page was not found on this HTTPS server.</p>";
-      response += "<p><a href=\"/\">Return to home</a></p></body></html>";
-    }
-    
-    // Send HTTP response
-    String httpResponse = "HTTP/1.1 200 OK\r\n";
-    httpResponse += "Content-Type: " + contentType + "\r\n";
-    httpResponse += "Content-Length: " + String(response.length()) + "\r\n";
-    httpResponse += "Connection: close\r\n";
-    httpResponse += "Server: Teams-Red-Light-HTTPS/1.0\r\n\r\n";
-    httpResponse += response;
-    
-    client.print(httpResponse);
-    client.stop();
-    
-    LOG_DEBUG("HTTPS client disconnected");
-  }
-}
-
-String generateRootPage() {
+String generateHTTPSRootPage() {
   String html = "<!DOCTYPE html>";
   html += "<html>";
   html += "<head>";
-  html += "<title>Teams Red Light - HTTPS</title>";
+  html += "<title>Teams Red Light - AsyncWebServer</title>";
   html += "<meta charset=\"UTF-8\">";
   html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
   html += "<style>";
   html += "body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }";
   html += ".container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }";
   html += "h1 { color: #d73502; text-align: center; }";
-  html += ".https-badge { background-color: #28a745; color: white; padding: 5px 10px; border-radius: 3px; font-size: 12px; margin-left: 10px; }";
+  html += ".async-badge { background-color: #007bff; color: white; padding: 5px 10px; border-radius: 3px; font-size: 12px; margin-left: 10px; }";
+  html += ".ssl-note { background-color: #fff3cd; color: #856404; padding: 10px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107; }";
   html += ".status { padding: 15px; margin: 10px 0; border-radius: 5px; text-align: center; font-weight: bold; }";
   html += ".status.connected { background-color: #d4edda; color: #155724; }";
   html += ".status.disconnected { background-color: #f8d7da; color: #721c24; }";
@@ -1302,9 +1305,43 @@ String generateRootPage() {
   html += "</head>";
   html += "<body>";
   html += "<div class=\"container\">";
-  html += "<h1>🔴 Teams Red Light<span class=\"https-badge\">🔒 HTTPS</span></h1>";
-  html += "<div class=\"status configuring\">Secure connection established</div>";
-  html += "<h3>Configuration</h3>";
+  html += "<h1>🔴 Teams Red Light<span class=\"async-badge\">AsyncWebServer</span></h1>";
+  
+  html += "<div class=\"ssl-note\">";
+  html += "⚠️ <strong>SSL Status:</strong> Running on AsyncWebServer (HTTP). ";
+  html += "True HTTPS requires AsyncTCP compiled with SSL support.";
+  html += "</div>";
+  
+  // Show current status
+  String statusText = "Unknown";
+  String statusClass = "configuring";
+  
+  switch (currentState) {
+    case STATE_AP_MODE:
+      statusText = "Access Point Mode - Ready for configuration";
+      statusClass = "configuring";
+      break;
+    case STATE_CONNECTING_WIFI:
+      statusText = "Connecting to WiFi...";
+      statusClass = "configuring";
+      break;
+    case STATE_CONNECTING_OAUTH:
+      statusText = "Connecting to Microsoft 365...";
+      statusClass = "configuring";
+      break;
+    case STATE_AUTHENTICATED:
+    case STATE_MONITORING:
+      statusText = "Connected and monitoring Teams presence";
+      statusClass = "connected";
+      break;
+    case STATE_ERROR:
+      statusText = "Error - Please check configuration";
+      statusClass = "disconnected";
+      break;
+  }
+  
+  html += "<div class=\"status " + statusClass + "\">" + statusText + "</div>";
+  html += "<h3>AsyncWebServer Configuration</h3>";
   html += "<button onclick=\"window.location.href='/config'\">Configure Device</button>";
   html += "<button onclick=\"window.location.href='/status'\">Check Status</button>";
   html += "<button onclick=\"window.location.href='http://";
@@ -1313,38 +1350,92 @@ String generateRootPage() {
   } else {
     html += WiFi.localIP().toString();
   }
-  html += "'\">Switch to HTTP</button>";
+  html += "'\">Switch to HTTP Server</button>";
   html += "</div>";
   html += "</body></html>";
   
   return html;
 }
 
-String generateConfigPage() {
+String generateHTTPSConfigPage() {
   String html = "<!DOCTYPE html>";
   html += "<html>";
   html += "<head>";
-  html += "<title>Teams Red Light - Configuration (HTTPS)</title>";
+  html += "<title>Teams Red Light - AsyncWebServer Configuration</title>";
   html += "<meta charset=\"UTF-8\">";
   html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+  html += "<style>";
+  html += "body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }";
+  html += ".container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }";
+  html += "h1 { color: #d73502; text-align: center; }";
+  html += ".async-badge { background-color: #007bff; color: white; padding: 5px 10px; border-radius: 3px; font-size: 12px; margin-left: 10px; }";
+  html += ".ssl-note { background-color: #fff3cd; color: #856404; padding: 10px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107; }";
+  html += ".section { margin: 20px 0; padding: 15px; border-left: 4px solid #d73502; background-color: #f8f9fa; }";
+  html += ".form-group { margin: 15px 0; }";
+  html += "label { display: block; margin-bottom: 5px; font-weight: bold; }";
+  html += "input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }";
+  html += "button { background-color: #d73502; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }";
+  html += "button:hover { background-color: #b12d02; }";
+  html += ".help { font-size: 12px; color: #666; margin-top: 5px; }";
+  html += "</style>";
   html += "</head>";
   html += "<body>";
-  html += "<h1>🔴 Teams Red Light - Secure Configuration</h1>";
-  html += "<p>This is the secure HTTPS configuration interface.</p>";
-  html += "<p>For full configuration features, please use the HTTP interface.</p>";
-  html += "<p><a href=\"http://";
-  if (currentState == STATE_AP_MODE) {
-    html += "192.168.4.1/config";
-  } else {
-    html += WiFi.localIP().toString() + "/config";
-  }
-  html += "\">Go to HTTP Configuration</a></p>";
+  html += "<div class=\"container\">";
+  html += "<h1>🔴 Teams Red Light<span class=\"async-badge\">AsyncWebServer</span></h1>";
+  
+  html += "<div class=\"ssl-note\">";
+  html += "⚠️ <strong>Note:</strong> This configuration interface uses AsyncWebServer. ";
+  html += "Full HTTPS encryption requires AsyncTCP with SSL support.";
+  html += "</div>";
+  
+  html += "<form action=\"/save\" method=\"post\">";
+  
+  html += "<div class=\"section\">";
+  html += "<h3>WiFi Settings</h3>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"ssid\">WiFi Network Name (SSID):</label>";
+  html += "<input type=\"text\" id=\"ssid\" name=\"ssid\" value=\"" + wifiSSID + "\" placeholder=\"Enter WiFi network name\">";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"password\">WiFi Password:</label>";
+  html += "<input type=\"password\" id=\"password\" name=\"password\" placeholder=\"Enter WiFi password\">";
+  html += "<div class=\"help\">Leave blank to keep current password</div>";
+  html += "</div>";
+  html += "</div>";
+  
+  html += "<div class=\"section\">";
+  html += "<h3>Microsoft 365 Integration</h3>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"tenant_id\">Tenant ID:</label>";
+  html += "<input type=\"text\" id=\"tenant_id\" name=\"tenant_id\" value=\"" + tenantId + "\" placeholder=\"Enter Microsoft 365 Tenant ID\">";
+  html += "<div class=\"help\">Find this in Azure AD > Properties > Directory ID</div>";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"client_id\">Application (Client) ID:</label>";
+  html += "<input type=\"text\" id=\"client_id\" name=\"client_id\" value=\"" + clientId + "\" placeholder=\"Enter Application ID\">";
+  html += "<div class=\"help\">From your Azure AD app registration</div>";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"client_secret\">Client Secret:</label>";
+  html += "<input type=\"password\" id=\"client_secret\" name=\"client_secret\" placeholder=\"Enter Client Secret\">";
+  html += "<div class=\"help\">Leave blank to keep current secret</div>";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"user_email\">User Email:</label>";
+  html += "<input type=\"email\" id=\"user_email\" name=\"user_email\" value=\"" + userEmail + "\" placeholder=\"Enter your Microsoft 365 email\">";
+  html += "</div>";
+  html += "</div>";
+  
+  html += "<button type=\"submit\">Save Configuration</button>";
+  html += "<button type=\"button\" onclick=\"window.location.href='/'\">Back to Home</button>";
+  html += "</form>";
+  html += "</div>";
   html += "</body></html>";
   
   return html;
 }
 
-String generateStatusResponse() {
+String generateHTTPSStatusResponse() {
   String json = "{";
   json += "\"status\":\"success\",";
   json += "\"https\":true,";
