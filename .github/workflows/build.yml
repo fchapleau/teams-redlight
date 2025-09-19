@@ -181,8 +181,8 @@ jobs:
   deploy-web:
     runs-on: ubuntu-latest
     needs: [validate, build-firmware]
-    # Only deploy to GitHub Pages from main branch or releases
-    if: github.ref == 'refs/heads/main' || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    # Only deploy to GitHub Pages from main branch, tags, or releases
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       pages: write
