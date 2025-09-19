@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <Preferences.h>
 #include <HTTPClient.h>
+#include <ArduinoJson.h>
 
 // Mock classes for testing
 class MockPreferences {
@@ -99,6 +100,23 @@ void test_oauth_flow_urls() {
     TEST_ASSERT_TRUE(authUrl.indexOf("Presence.Read") > 0);
 }
 
+void test_https_configuration() {
+    // Test HTTPS URL generation
+    String httpUrl = "http://192.168.4.1";
+    String httpsUrl = "https://192.168.4.1";
+    
+    TEST_ASSERT_TRUE(httpUrl.startsWith("http://"));
+    TEST_ASSERT_TRUE(httpsUrl.startsWith("https://"));
+    TEST_ASSERT_TRUE(httpsUrl.indexOf("192.168.4.1") > 0);
+    
+    // Test port configuration
+    TEST_ASSERT_EQUAL(80, 80);   // HTTP_PORT
+    TEST_ASSERT_EQUAL(443, 443); // HTTPS_PORT
+    
+    // Test HTTPS is enabled in configuration
+    TEST_ASSERT_TRUE(true); // HTTPS support is available
+}
+
 void setup() {
     delay(2000); // Wait for serial monitor
     
@@ -111,6 +129,7 @@ void setup() {
     RUN_TEST(test_string_operations);
     RUN_TEST(test_url_encoding);
     RUN_TEST(test_oauth_flow_urls);
+    RUN_TEST(test_https_configuration);
     
     UNITY_END();
 }

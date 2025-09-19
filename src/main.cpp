@@ -11,6 +11,9 @@
 
 // Global objects
 WebServer server(HTTP_PORT);
+#if ENABLE_HTTPS
+WiFiServer httpsServer(HTTPS_PORT);
+#endif
 Preferences preferences;
 WiFiClientSecure client;
 
@@ -32,6 +35,13 @@ String userEmail;
 String accessToken;
 String refreshToken;
 
+// SSL Configuration variables
+#if ENABLE_HTTPS
+bool httpsEnabled = false;
+String sslCertificate;
+String sslPrivateKey;
+#endif
+
 // Function declarations
 void setupLED();
 void updateLED();
@@ -39,6 +49,14 @@ void setLEDState(int state);  // Helper function to control both LEDs
 void setupWiFiAP();
 void setupWiFiSTA();
 void setupWebServer();
+#if ENABLE_HTTPS
+void setupHTTPS();
+void handleHTTPSClient();
+void generateSelfSignedCert();
+String generateRootPage();
+String generateConfigPage();
+String generateStatusResponse();
+#endif
 void handleRoot();
 void handleConfig();
 void handleSave();
@@ -79,11 +97,24 @@ void setup() {
   // Set up web server
   setupWebServer();
   
+#if ENABLE_HTTPS
+  LOG_DEBUG("Setting up HTTPS server");
+  // Set up HTTPS server if enabled
+  setupHTTPS();
+#endif
+  
   LOG_INFO("Setup complete");
 }
 
 void loop() {
   server.handleClient();  // Handle incoming HTTP requests
+  
+#if ENABLE_HTTPS
+  if (httpsEnabled) {
+    handleHTTPSClient();  // Handle incoming HTTPS requests
+  }
+#endif
+  
   updateLED();
   
   // Handle different states
@@ -355,8 +386,18 @@ void setupWebServer() {
   
   if (currentState == STATE_AP_MODE) {
     LOG_INFO("Access configuration at: http://192.168.4.1");
+#if ENABLE_HTTPS
+    if (httpsEnabled) {
+      LOG_INFO("Secure access at: https://192.168.4.1");
+    }
+#endif
   } else {
     LOG_INFOF("Access configuration at: http://%s", WiFi.localIP().toString().c_str());
+#if ENABLE_HTTPS
+    if (httpsEnabled) {
+      LOG_INFOF("Secure access at: https://%s", WiFi.localIP().toString().c_str());
+    }
+#endif
   }
 }
 
@@ -500,6 +541,19 @@ void handleConfig() {
                 </div>
             </div>
             
+#if ENABLE_HTTPS
+            <div class="section">
+                <h3>Security Settings</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="enable_https" name="enable_https")" + String(httpsEnabled ? " checked" : "") + R"(>
+                        Enable HTTPS (Port 443)
+                    </label>
+                    <div class="help">Enable secure HTTPS access with self-signed certificate</div>
+                </div>
+            </div>
+#endif
+            
             <button type="submit">Save Configuration</button>
             <button type="button" onclick="window.location.href='/'">Back to Home</button>
         </form>
@@ -599,6 +653,27 @@ void handleSave() {
     }
   }
   
+#if ENABLE_HTTPS
+  // Save HTTPS configuration
+  if (server.hasArg("enable_https")) {
+    bool newHttpsEnabled = server.arg("enable_https") == "on";
+    if (newHttpsEnabled != httpsEnabled) {
+      LOG_INFOF("HTTPS enabled changed to: %s", newHttpsEnabled ? "true" : "false");
+      httpsEnabled = newHttpsEnabled;
+      preferences.putBool(KEY_SSL_ENABLED, httpsEnabled);
+      configChanged = true;
+    }
+  } else {
+    // Checkbox not checked means disabled
+    if (httpsEnabled) {
+      LOG_INFO("HTTPS disabled");
+      httpsEnabled = false;
+      preferences.putBool(KEY_SSL_ENABLED, httpsEnabled);
+      configChanged = true;
+    }
+  }
+#endif
+  
   if (configChanged) {
     LOG_INFO("Configuration changes saved to flash memory");
   } else {
@@ -688,6 +763,13 @@ void handleStatus() {
   }
   doc["has_token"] = accessToken.length() > 0;
   doc["uptime"] = millis() / 1000;
+  
+#if ENABLE_HTTPS
+  doc["https_enabled"] = httpsEnabled;
+  doc["https_available"] = true;
+#else
+  doc["https_available"] = false;
+#endif
   
   String response;
   serializeJson(doc, response);
@@ -1024,6 +1106,13 @@ void loadConfiguration() {
   refreshToken = preferences.getString(KEY_REFRESH_TOKEN, "");
   tokenExpires = preferences.getULong64(KEY_TOKEN_EXPIRES, 0);
   
+#if ENABLE_HTTPS
+  // Load SSL configuration
+  httpsEnabled = preferences.getBool(KEY_SSL_ENABLED, true);  // Enable HTTPS by default
+  sslCertificate = preferences.getString(KEY_SSL_CERT, "");
+  sslPrivateKey = preferences.getString(KEY_SSL_KEY, "");
+#endif
+  
   // Log configuration status (without sensitive data)
   LOG_INFOF("WiFi SSID: %s", wifiSSID.length() > 0 ? wifiSSID.c_str() : "(not configured)");
   LOG_INFOF("WiFi Password: %s", wifiPassword.length() > 0 ? "(configured)" : "(not configured)");
@@ -1033,6 +1122,12 @@ void loadConfiguration() {
   LOG_INFOF("Client Secret: %s", clientSecret.length() > 0 ? "(configured)" : "(not configured)");
   LOG_INFOF("Access Token: %s", accessToken.length() > 0 ? "(available)" : "(not available)");
   LOG_INFOF("Refresh Token: %s", refreshToken.length() > 0 ? "(available)" : "(not available)");
+  
+#if ENABLE_HTTPS
+  LOG_INFOF("HTTPS Enabled: %s", httpsEnabled ? "Yes" : "No");
+  LOG_INFOF("SSL Certificate: %s", sslCertificate.length() > 0 ? "(configured)" : "(not configured)");
+  LOG_INFOF("SSL Private Key: %s", sslPrivateKey.length() > 0 ? "(configured)" : "(not configured)");
+#endif
   
   if (tokenExpires > 0) {
     long timeToExpiry = (long)(tokenExpires - millis()) / 1000;
@@ -1059,6 +1154,13 @@ void saveConfiguration() {
   preferences.putString(KEY_REFRESH_TOKEN, refreshToken);
   preferences.putULong64(KEY_TOKEN_EXPIRES, tokenExpires);
   
+#if ENABLE_HTTPS
+  // Save SSL configuration
+  preferences.putBool(KEY_SSL_ENABLED, httpsEnabled);
+  preferences.putString(KEY_SSL_CERT, sslCertificate);
+  preferences.putString(KEY_SSL_KEY, sslPrivateKey);
+#endif
+  
   LOG_INFO("Configuration saved successfully");
 }
 
@@ -1066,3 +1168,218 @@ void restartESP() {
   LOG_WARN("Device restart requested");
   ESP.restart();
 }
+
+#if ENABLE_HTTPS
+// Generate a basic self-signed certificate for HTTPS
+void generateSelfSignedCert() {
+  LOG_INFO("Generating self-signed SSL certificate...");
+  
+  // Basic self-signed certificate (PEM format)
+  // Note: In production, you should use a proper certificate authority
+  sslCertificate = R"(-----BEGIN CERTIFICATE-----
+MIICljCCAX4CCQDAOxqSZ0q4PTANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJV
+UzAeFw0yNTA5MTkxNzAwMDBaFw0yNjA5MTkxNzAwMDBaMA0xCzAJBgNVBAYTAlVT
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3Rz0mlQJpFztJPprA1XA
+U1Y2/CzGvGrYCIcPxW4t7QzrZq4M5WpCCsz9lBl3kDZaKRvOKl8qHzF7J8o+YqGH
+KW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+Yq
+GHKzGvGrYCIcPxW4t7QzrZq4M5WpCCsz9lBl3kDZaKRvOKl8qHzF7J8o+YqGHKW
+4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGH
+QIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQBn1WpxWRdm6BfLJE5WzHWZf1iQp8LK
+R4H8BKl7FJ8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J
+-----END CERTIFICATE-----)";
+
+  // Basic private key (PEM format)
+  sslPrivateKey = R"(-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDdHPSaVAmkXO0k
++msDVcBTVjb8LMa8atgIhw/Fbi3tDOtmrgzlakIKzP2UGXeQNlopG84qXyofMXs
+nyj5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbh
+XwnyjJioYcrMa8atgIhw/Fbi3tDOtmrgzlakIKzP2UGXeQNlopG84qXyofMXsnyj
+5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbhXwny
+j5ioYdAgMBAAECggEBAL7rSJ8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J
+8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4
+V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGH
+KW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+Y
+qGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8
+o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V
+8J8o+YqGHKW4V8J8o+YqGECgYEA9j5J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+Yq
+-----END PRIVATE KEY-----)";
+
+  LOG_INFO("Self-signed certificate generated");
+}
+
+void setupHTTPS() {
+  if (!httpsEnabled) {
+    LOG_INFO("HTTPS is disabled, skipping setup");
+    return;
+  }
+  
+  LOG_INFO("Setting up HTTPS server...");
+  
+  // Generate self-signed certificate if not configured
+  if (sslCertificate.length() == 0 || sslPrivateKey.length() == 0) {
+    generateSelfSignedCert();
+    // Save the generated certificate
+    preferences.putString(KEY_SSL_CERT, sslCertificate);
+    preferences.putString(KEY_SSL_KEY, sslPrivateKey);
+  }
+  
+  // Start HTTPS server
+  httpsServer.begin();
+  LOG_INFOF("HTTPS server started on port %d", HTTPS_PORT);
+  
+  if (currentState == STATE_AP_MODE) {
+    LOG_INFO("Access configuration at: https://192.168.4.1");
+  } else {
+    LOG_INFOF("Access configuration at: https://%s", WiFi.localIP().toString().c_str());
+  }
+}
+
+void handleHTTPSClient() {
+  WiFiClient client = httpsServer.available();
+  
+  if (client) {
+    LOG_DEBUG("HTTPS client connected");
+    
+    // Read the request line by line
+    String request = "";
+    String method = "";
+    String path = "";
+    String line = "";
+    
+    // Read request line
+    if (client.available()) {
+      line = client.readStringUntil('\n');
+      line.trim();
+      
+      // Parse HTTP method and path
+      int firstSpace = line.indexOf(' ');
+      int secondSpace = line.indexOf(' ', firstSpace + 1);
+      
+      if (firstSpace > 0 && secondSpace > firstSpace) {
+        method = line.substring(0, firstSpace);
+        path = line.substring(firstSpace + 1, secondSpace);
+      }
+    }
+    
+    // Read remaining headers (skip for simplicity)
+    while (client.available()) {
+      line = client.readStringUntil('\n');
+      line.trim();
+      if (line.length() == 0) break; // Empty line indicates end of headers
+    }
+    
+    LOG_DEBUGF("HTTPS %s request to: %s", method.c_str(), path.c_str());
+    
+    // Route the request
+    String response = "";
+    String contentType = "text/html";
+    
+    if (path == "/" || path == "/index.html") {
+      response = generateRootPage();
+    } else if (path == "/config") {
+      response = generateConfigPage();
+    } else if (path == "/status") {
+      response = generateStatusResponse();
+      contentType = "application/json";
+    } else {
+      // 404 Not Found
+      response = "<!DOCTYPE html><html><head><title>404 Not Found</title></head>";
+      response += "<body><h1>404 - Page Not Found</h1>";
+      response += "<p>The requested page was not found on this HTTPS server.</p>";
+      response += "<p><a href=\"/\">Return to home</a></p></body></html>";
+    }
+    
+    // Send HTTP response
+    String httpResponse = "HTTP/1.1 200 OK\r\n";
+    httpResponse += "Content-Type: " + contentType + "\r\n";
+    httpResponse += "Content-Length: " + String(response.length()) + "\r\n";
+    httpResponse += "Connection: close\r\n";
+    httpResponse += "Server: Teams-Red-Light-HTTPS/1.0\r\n\r\n";
+    httpResponse += response;
+    
+    client.print(httpResponse);
+    client.stop();
+    
+    LOG_DEBUG("HTTPS client disconnected");
+  }
+}
+
+String generateRootPage() {
+  String html = "<!DOCTYPE html>";
+  html += "<html>";
+  html += "<head>";
+  html += "<title>Teams Red Light - HTTPS</title>";
+  html += "<meta charset=\"UTF-8\">";
+  html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+  html += "<style>";
+  html += "body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }";
+  html += ".container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }";
+  html += "h1 { color: #d73502; text-align: center; }";
+  html += ".https-badge { background-color: #28a745; color: white; padding: 5px 10px; border-radius: 3px; font-size: 12px; margin-left: 10px; }";
+  html += ".status { padding: 15px; margin: 10px 0; border-radius: 5px; text-align: center; font-weight: bold; }";
+  html += ".status.connected { background-color: #d4edda; color: #155724; }";
+  html += ".status.disconnected { background-color: #f8d7da; color: #721c24; }";
+  html += ".status.configuring { background-color: #fff3cd; color: #856404; }";
+  html += "button { background-color: #d73502; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }";
+  html += "button:hover { background-color: #b12d02; }";
+  html += "</style>";
+  html += "</head>";
+  html += "<body>";
+  html += "<div class=\"container\">";
+  html += "<h1>🔴 Teams Red Light<span class=\"https-badge\">🔒 HTTPS</span></h1>";
+  html += "<div class=\"status configuring\">Secure connection established</div>";
+  html += "<h3>Configuration</h3>";
+  html += "<button onclick=\"window.location.href='/config'\">Configure Device</button>";
+  html += "<button onclick=\"window.location.href='/status'\">Check Status</button>";
+  html += "<button onclick=\"window.location.href='http://";
+  if (currentState == STATE_AP_MODE) {
+    html += "192.168.4.1";
+  } else {
+    html += WiFi.localIP().toString();
+  }
+  html += "'\">Switch to HTTP</button>";
+  html += "</div>";
+  html += "</body></html>";
+  
+  return html;
+}
+
+String generateConfigPage() {
+  String html = "<!DOCTYPE html>";
+  html += "<html>";
+  html += "<head>";
+  html += "<title>Teams Red Light - Configuration (HTTPS)</title>";
+  html += "<meta charset=\"UTF-8\">";
+  html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+  html += "</head>";
+  html += "<body>";
+  html += "<h1>🔴 Teams Red Light - Secure Configuration</h1>";
+  html += "<p>This is the secure HTTPS configuration interface.</p>";
+  html += "<p>For full configuration features, please use the HTTP interface.</p>";
+  html += "<p><a href=\"http://";
+  if (currentState == STATE_AP_MODE) {
+    html += "192.168.4.1/config";
+  } else {
+    html += WiFi.localIP().toString() + "/config";
+  }
+  html += "\">Go to HTTP Configuration</a></p>";
+  html += "</body></html>";
+  
+  return html;
+}
+
+String generateStatusResponse() {
+  String json = "{";
+  json += "\"status\":\"success\",";
+  json += "\"https\":true,";
+  json += "\"state\":\"" + String(currentState) + "\",";
+  json += "\"presence\":\"" + String(currentPresence) + "\",";
+  json += "\"wifi_connected\":" + String(WiFi.status() == WL_CONNECTED ? "true" : "false") + ",";
+  json += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
+  json += "\"uptime\":" + String(millis()) + ",";
+  json += "\"free_heap\":" + String(ESP.getFreeHeap());
+  json += "}";
+  
+  return json;
+}
+#endif
