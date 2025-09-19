@@ -234,10 +234,11 @@ void setupWiFiAP() {
   WiFi.mode(WIFI_AP);
   LOG_DEBUGF("WiFi mode set to AP: %s", AP_SSID);
   
-  // Configure AP with custom IP in 172.16.0.0/12 range
-  IPAddress local_IP(172, 16, 4, 1);      // Gateway IP
-  IPAddress gateway(172, 16, 4, 1);       // Gateway IP  
-  IPAddress subnet(255, 240, 0, 0);       // Subnet mask for /12
+  // Configure AP with standard ESP32 default IP configuration
+  // This ensures DHCP server works properly for connecting clients
+  IPAddress local_IP(192, 168, 4, 1);      // Gateway IP (ESP32 default)
+  IPAddress gateway(192, 168, 4, 1);       // Gateway IP  
+  IPAddress subnet(255, 255, 255, 0);      // Subnet mask for /24
   
   LOG_DEBUGF("Configuring AP IP: %s", local_IP.toString().c_str());
   if (!WiFi.softAPConfig(local_IP, gateway, subnet)) {
@@ -353,7 +354,7 @@ void setupWebServer() {
   LOG_INFOF("Web server started on port %d", HTTP_PORT);
   
   if (currentState == STATE_AP_MODE) {
-    LOG_INFO("Access configuration at: http://172.16.4.1");
+    LOG_INFO("Access configuration at: http://192.168.4.1");
   } else {
     LOG_INFOF("Access configuration at: http://%s", WiFi.localIP().toString().c_str());
   }
