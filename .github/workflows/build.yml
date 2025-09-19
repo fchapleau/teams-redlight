@@ -14,6 +14,7 @@ jobs:
       version: ${{ steps.gitversion.outputs.semVer }}
       informationalVersion: ${{ steps.gitversion.outputs.informationalVersion }}
       fullVersion: ${{ steps.gitversion.outputs.fullSemVer }}
+      shortVersion: ${{ steps.short-version.outputs.version }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -30,6 +31,25 @@ jobs:
       with:
         useConfigFile: true
         configFilePath: GitVersion.yml
+    
+    - name: Create Short Version Format
+      id: short-version
+      run: |
+        # Create a shorter version format: {semVer}+{commits-since-tag}.{short-hash}
+        # Remove branch information and use only commit count and short hash
+        SEMVER="${{ steps.gitversion.outputs.semVer }}"
+        COMMITS_SINCE_TAG="${{ steps.gitversion.outputs.commitsSinceVersionSource }}"
+        SHORT_HASH="${{ steps.gitversion.outputs.shortSha }}"
+        
+        # Create short version: semver + commits + short hash (without branch)
+        if [ "$COMMITS_SINCE_TAG" = "0" ]; then
+          SHORT_VERSION="$SEMVER"
+        else
+          SHORT_VERSION="$SEMVER+$COMMITS_SINCE_TAG.$SHORT_HASH"
+        fi
+        
+        echo "Short version: $SHORT_VERSION"
+        echo "version=$SHORT_VERSION" >> $GITHUB_OUTPUT
     
     - name: Validate Project Structure
       run: |
@@ -127,10 +147,10 @@ jobs:
     
     - name: Update manifest.json with GitVersion
       run: |
-        echo "Updating manifest.json with version: ${{ needs.validate.outputs.informationalVersion }}"
+        echo "Updating manifest.json with version: ${{ needs.validate.outputs.shortVersion }}"
         
-        # Update the version in manifest.json with the GitVersion calculated version
-        sed -i 's/"version": ".*"/"version": "${{ needs.validate.outputs.informationalVersion }}"/' web/manifest.json
+        # Update the version in manifest.json with the short version
+        sed -i 's/"version": ".*"/"version": "${{ needs.validate.outputs.shortVersion }}"/' web/manifest.json
         
         # Verify the update
         echo "Updated manifest.json version:"
@@ -188,7 +208,7 @@ jobs:
         
         # Create version info
         echo "Build Date: $(date)" > release/build-info.txt
-        echo "Version: ${{ needs.validate.outputs.informationalVersion }}" >> release/build-info.txt
+        echo "Version: ${{ needs.validate.outputs.shortVersion }}" >> release/build-info.txt
         echo "SemVer: ${{ needs.validate.outputs.version }}" >> release/build-info.txt
         echo "Full Version: ${{ needs.validate.outputs.fullVersion }}" >> release/build-info.txt
         echo "Commit: ${{ github.sha }}" >> release/build-info.txt
@@ -301,8 +321,8 @@ jobs:
         mkdir -p _site
         
         # Update the web manifest with GitVersion before copying
-        echo "Updating manifest.json with GitVersion: ${{ needs.validate.outputs.informationalVersion }}"
-        sed -i 's/"version": ".*"/"version": "${{ needs.validate.outputs.informationalVersion }}"/' web/manifest.json
+        echo "Updating manifest.json with GitVersion: ${{ needs.validate.outputs.shortVersion }}"
+        sed -i 's/"version": ".*"/"version": "${{ needs.validate.outputs.shortVersion }}"/' web/manifest.json
         
         # Copy the web flasher to be the default page
         cp web/index.html _site/index.html

@@ -139,7 +139,7 @@ fi
 
 # Test 8: Check firmware version format (GitVersion semantic versioning)
 echo "Test 8: Checking firmware version format..."
-if grep -qE '"version": "[0-9]+\.[0-9]+\.[0-9]+"' web/manifest.json; then
+if grep -qE '"version": "[0-9]+\.[0-9]+\.[0-9]+(\+[0-9]+\.[a-f0-9]+)?"' web/manifest.json; then
     VERSION=$(grep '"version"' web/manifest.json | cut -d'"' -f4)
     echo "✅ Firmware version follows semantic versioning: $VERSION"
 else

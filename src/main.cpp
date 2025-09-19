@@ -3,6 +3,7 @@
 #include <WebServer.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <WiFiServerSecure.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <Update.h>
@@ -12,7 +13,7 @@
 // Global objects
 WebServer server(HTTP_PORT);
 #if ENABLE_HTTPS
-WiFiServer httpsServer(HTTPS_PORT);
+WiFiServerSecure httpsServer(HTTPS_PORT);
 #endif
 Preferences preferences;
 WiFiClientSecure client;
@@ -1223,6 +1224,10 @@ void setupHTTPS() {
     preferences.putString(KEY_SSL_KEY, sslPrivateKey);
   }
   
+  // Configure SSL certificates for the HTTPS server
+  httpsServer.loadCertificate(sslCertificate.c_str());
+  httpsServer.loadPrivateKey(sslPrivateKey.c_str());
+  
   // Start HTTPS server
   httpsServer.begin();
   LOG_INFOF("HTTPS server started on port %d", HTTPS_PORT);
@@ -1235,7 +1240,7 @@ void setupHTTPS() {
 }
 
 void handleHTTPSClient() {
-  WiFiClient client = httpsServer.available();
+  WiFiClientSecure client = httpsServer.available();
   
   if (client) {
     LOG_DEBUG("HTTPS client connected");
