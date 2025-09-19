@@ -11,6 +11,9 @@ lib/
 *.elf
 *.map
 
+# Exception: Allow firmware binaries in web directory for ESP Web Tools
+!web/firmware/*.bin
+
 # IDE files
 .idea/
 *.sublime-*
