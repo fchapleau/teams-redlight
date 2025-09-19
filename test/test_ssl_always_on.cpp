@@ -1,4 +1,5 @@
 #include <unity.h>
+#include <Arduino.h>
 
 // Test that SSL/HTTPS is always enabled
 void test_ssl_always_enabled() {

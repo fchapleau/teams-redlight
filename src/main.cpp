@@ -3,7 +3,9 @@
 #include <WebServer.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#if ENABLE_HTTPS
 #include <WiFiServerSecure.h>
+#endif
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <Update.h>

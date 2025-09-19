@@ -20,7 +20,7 @@
 // Network Configuration
 #define HTTP_PORT 80
 #define HTTPS_PORT 443
-#define ENABLE_HTTPS true   // Enable HTTPS support
+#define ENABLE_HTTPS false   // HTTPS support disabled - WiFiServerSecure not available in ESP32 Arduino framework
 
 // Microsoft Graph API Configuration
 #define GRAPH_API_HOST "graph.microsoft.com"
