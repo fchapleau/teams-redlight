@@ -1355,19 +1355,8 @@
                 }
             });
         }
-            if (port) {
-                try {
-                    log('Resetting ESP32 using DTR signal...');
-                    // Reset ESP32 by toggling DTR (EN/RESET line)
-                    await port.setSignals({ dataTerminalReady: false, requestToSend: true });
-                    await delay(100);
-                    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
-                    log('ESP32 reset signal sent');
-                } catch (error) {
-                    log(`Reset error: ${error.message}`);
-                }
-            }
-        }
+
+        async function resetESP32() {
             if (port) {
                 try {
                     log('Resetting ESP32 using DTR signal...');
