@@ -242,6 +242,9 @@ jobs:
         # Copy the web flasher to be the default page
         cp web/index.html _site/index.html
         
+        # Copy manifest.json for ESP Web Tools
+        cp web/manifest.json _site/manifest.json
+        
         # Copy firmware binaries to serve from same origin (to avoid CORS)
         if [ -d "firmware" ]; then
           echo "📦 Copying firmware files to GitHub Pages to avoid CORS issues..."
@@ -264,12 +267,30 @@ jobs:
           fi
         else
           echo "⚠️  No firmware artifacts found - web flasher will fallback to placeholder firmware"
+          # Create a note for users when no firmware is available
+          mkdir -p _site/firmware
+          echo "No firmware binary available. This is expected during development when PlatformIO registry is not accessible." > _site/firmware/README.txt
         fi
         
         # Verify the files are ready
         if [ ! -f _site/index.html ]; then
           echo "❌ Web flasher index.html not found"
           exit 1
+        fi
+        
+        if [ ! -f _site/manifest.json ]; then
+          echo "❌ ESP Web Tools manifest.json not found"
+          exit 1
+        fi
+        
+        # Validate ESP Web Tools configuration
+        echo "🔍 Validating ESP Web Tools manifest configuration..."
+        if [ -f _site/firmware/teams-redlight-firmware.bin ]; then
+          echo "✅ Firmware binary available for ESP Web Tools"
+          FIRMWARE_SIZE=$(du -h _site/firmware/teams-redlight-firmware.bin | cut -f1)
+          echo "📦 Firmware size: $FIRMWARE_SIZE"
+        else
+          echo "⚠️  No firmware binary found - ESP Web Tools will show error"
         fi
         
         echo "✅ Web flasher ready for deployment as default GitHub Pages"

@@ -31,14 +31,14 @@ else
     exit 1
 fi
 
-# Test 4: Verify web interface only uses in-memory placeholder, not files
-echo "Test 4: Checking web interface uses in-memory placeholder only..."
-if grep -q "new Uint8Array(1024 \* 1024)" web/index.html && ! grep -q "write.*firmware\|create.*firmware" web/index.html; then
-    echo "✅ Web interface uses in-memory placeholder only"
+# Test 4: Verify ESP Web Tools uses real firmware from manifest, no mock files
+echo "Test 4: Checking ESP Web Tools uses real firmware only..."
+if grep -q 'manifest="./manifest.json"' web/index.html && ! grep -q "mock.*firmware\|demo.*firmware\|placeholder.*firmware" web/index.html; then
+    echo "✅ ESP Web Tools uses real firmware only, no mock files"
 else
-    echo "❌ Web interface may create firmware files"
+    echo "❌ Web interface may reference mock firmware"
     exit 1
 fi
 
 echo -e "\n🎉 All no-mock-firmware tests passed!"
-echo "The system will only build real firmware, never mock/demonstration files."
+echo "The system uses ESP Web Tools with real firmware binaries, never mock/demonstration files."

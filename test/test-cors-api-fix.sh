@@ -4,21 +4,21 @@
 
 echo "Testing simplified CORS fix implementation..."
 
-# Test 1: Check that web interface only uses GitHub Pages firmware
-echo "Test 1: Checking GitHub Pages only firmware loading..."
-if grep -q "Loading firmware from GitHub Pages" web/index.html && ! grep -q "browser_download_url\|GitHub API" web/index.html; then
-    echo "✅ Uses GitHub Pages only for firmware loading"
+# Test 1: Check that web interface uses ESP Web Tools (which handles all firmware loading)
+echo "Test 1: Checking ESP Web Tools handles firmware loading..."
+if grep -q 'esp-web-install-button' web/index.html && grep -q 'manifest="./manifest.json"' web/index.html; then
+    echo "✅ Uses ESP Web Tools for streamlined firmware loading"
 else
-    echo "❌ Still contains download fallback logic"
+    echo "❌ ESP Web Tools integration missing"
     exit 1
 fi
 
-# Test 2: Check that complex fallback logic is removed
-echo "Test 2: Checking complex fallback logic is removed..."
-if ! grep -q "firmwareAsset\|browser_download_url\|GitHub API" web/index.html; then
-    echo "✅ Complex fallback logic removed"
+# Test 2: Check that ESP Web Tools provides simplified firmware loading
+echo "Test 2: Checking ESP Web Tools provides simplified loading..."
+if grep -q 'esp-web-install-button' web/index.html; then
+    echo "✅ ESP Web Tools provides simplified firmware loading"
 else
-    echo "❌ Complex fallback logic still present"
+    echo "❌ ESP Web Tools integration missing"
     exit 1
 fi
 
@@ -31,14 +31,14 @@ else
     exit 1
 fi
 
-# Test 4: Check simplified error handling
-echo "Test 4: Checking simplified error handling..."
-if grep -q "Error loading firmware" web/index.html && grep -q "fallback placeholder firmware" web/index.html; then
-    echo "✅ Simplified error handling implemented"
+# Test 4: Check that ESP Web Tools simplifies error handling
+echo "Test 4: Checking ESP Web Tools error handling..."
+if grep -q 'esp-web-install-button-error' web/index.html; then
+    echo "✅ ESP Web Tools provides built-in error handling"
 else
-    echo "❌ Simplified error handling not found"
+    echo "❌ ESP Web Tools error handling not configured"
     exit 1
 fi
 
-echo -e "\n🎉 All simplified CORS fix tests passed!"
-echo "Firmware is now served directly from GitHub Pages without complex fallbacks."
+echo -e "\n🎉 All ESP Web Tools integration tests passed!"
+echo "Firmware is now served through ESP Web Tools with proper manifest configuration."

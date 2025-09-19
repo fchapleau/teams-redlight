@@ -4,12 +4,12 @@
 
 echo "Testing CORS fix implementation..."
 
-# Test 1: Check that web interface includes GitHub Pages firmware fetching
-echo "Test 1: Checking GitHub Pages firmware fetching logic..."
-if grep -q "fetch('./firmware/teams-redlight-firmware.bin')" web/index.html; then
-    echo "✅ GitHub Pages firmware fetching implemented"
+# Test 1: Check that web interface uses ESP Web Tools for firmware loading
+echo "Test 1: Checking ESP Web Tools firmware loading..."
+if grep -q 'manifest="./manifest.json"' web/index.html && grep -q 'esp-web-install-button' web/index.html; then
+    echo "✅ ESP Web Tools firmware loading implemented"
 else
-    echo "❌ GitHub Pages firmware fetching not found"
+    echo "❌ ESP Web Tools firmware loading not found"
     exit 1
 fi
 
@@ -22,12 +22,12 @@ else
     exit 1
 fi
 
-# Test 3: Check that workflow copies firmware to Pages deployment
-echo "Test 3: Checking workflow firmware copy logic..."
-if grep -q "Copy firmware binaries to serve from same origin" .github/workflows/build.yml; then
-    echo "✅ Workflow copies firmware to avoid CORS"
+# Test 3: Check that workflow copies manifest and firmware to Pages deployment
+echo "Test 3: Checking workflow manifest and firmware copy logic..."
+if grep -q "cp web/manifest.json _site/manifest.json" .github/workflows/build.yml && grep -q "Copy firmware binaries to serve from same origin" .github/workflows/build.yml; then
+    echo "✅ Workflow copies manifest and firmware to avoid CORS"
 else
-    echo "❌ Workflow firmware copy not found"
+    echo "❌ Workflow manifest and firmware copy not found"
     exit 1
 fi
 
