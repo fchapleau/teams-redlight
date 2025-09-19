@@ -25,6 +25,16 @@
           "offset": 65536 
         }
       ]
+    },
+    {
+      "chipFamily": "ESP32",
+      "name": "Teams Red Light (Merged)",
+      "parts": [
+        { 
+          "path": "firmware/teams-redlight-merged.bin", 
+          "offset": 0 
+        }
+      ]
     }
   ]
 }

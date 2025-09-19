@@ -17,6 +17,23 @@ invalid header: 0xffffffff
 ets Jul 29 2019 12:21:46
 ```
 
+## ESP Web Tools Specification Compliance
+
+This implementation fully complies with the [ESP Web Tools specification](https://esphome.github.io/esp-web-tools/) and provides two firmware formats:
+
+### Component-Based Approach (Default)
+Best for Arduino framework projects. ESP Web Tools flashes each component to its specific memory location:
+- **Bootloader** → 0x1000 (4KB offset)
+- **Partition Table** → 0x8000 (32KB offset)  
+- **Boot App0** → 0xe000 (56KB offset)
+- **Application** → 0x10000 (64KB offset)
+
+### Merged Firmware Approach (Alternative)
+Single binary file containing all components at correct offsets. Common for ESP-IDF projects:
+- **Complete Firmware** → 0x0 (contains all components in correct memory layout)
+
+Both approaches resolve the "invalid header: 0xffffffff" boot failures by ensuring all required ESP32 boot components are properly flashed.
+
 ## Root Cause
 
 The issue was caused by incomplete firmware flashing. The ESP Web Tools manifest was only flashing the application firmware at offset 0x10000, but ESP32 devices require:
@@ -54,7 +71,29 @@ The manifest now includes all required ESP32 firmware components:
 
 - Added `esp32dev_web` build environment in `platformio.ini`
 - Created `scripts/merge_firmware.py` to extract all firmware components
+- **Added merged firmware support** for ESP Web Tools specification compliance
 - Updated CI/CD workflow to build and distribute complete firmware
+
+The build system now creates **two firmware formats** for maximum ESP Web Tools compatibility:
+
+1. **Component-based approach** (recommended for Arduino framework):
+   ```json
+   "parts": [
+     { "path": "firmware/bootloader_dio_40m.bin", "offset": 4096 },
+     { "path": "firmware/partitions.bin", "offset": 32768 },
+     { "path": "firmware/boot_app0.bin", "offset": 57344 },
+     { "path": "firmware/teams-redlight-firmware.bin", "offset": 65536 }
+   ]
+   ```
+
+2. **Merged firmware approach** (ESP-IDF style):
+   ```json
+   "parts": [
+     { "path": "firmware/teams-redlight-merged.bin", "offset": 0 }
+   ]
+   ```
+
+Both approaches are fully compliant with the [ESP Web Tools specification](https://esphome.github.io/esp-web-tools/).
 
 ### 3. Enhanced User Interface
 

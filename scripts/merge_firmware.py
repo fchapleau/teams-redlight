@@ -20,6 +20,52 @@ from pathlib import Path
 # For PlatformIO
 Import("env")
 
+def create_merged_firmware(firmware_dir, output_file):
+    """
+    Create a merged firmware file compatible with ESP Web Tools specification.
+    This merges bootloader, partitions, boot_app0, and application into a single file.
+    """
+    print("🔧 Creating merged firmware for ESP Web Tools compatibility...")
+    
+    # Define the memory layout offsets (same as in manifest.json)
+    layout = [
+        (0x1000, firmware_dir / "bootloader_dio_40m.bin"),     # Bootloader at 0x1000
+        (0x8000, firmware_dir / "partitions.bin"),            # Partitions at 0x8000  
+        (0xe000, firmware_dir / "boot_app0.bin"),             # Boot App0 at 0xe000
+        (0x10000, firmware_dir / "teams-redlight-firmware.bin") # Application at 0x10000
+    ]
+    
+    # Calculate total size needed
+    max_offset = 0
+    for offset, file_path in layout:
+        if file_path.exists():
+            file_size = file_path.stat().st_size
+            max_offset = max(max_offset, offset + file_size)
+        else:
+            print(f"⚠️  Warning: {file_path} not found for merged firmware")
+            return False
+    
+    # Create merged firmware file filled with 0xFF (erased flash state)
+    merged_data = bytearray(b'\xFF' * max_offset)
+    
+    # Copy each component to its correct offset
+    for offset, file_path in layout:
+        if file_path.exists():
+            with open(file_path, 'rb') as f:
+                component_data = f.read()
+                merged_data[offset:offset + len(component_data)] = component_data
+                print(f"   ✅ Merged {file_path.name} at offset 0x{offset:X} ({len(component_data):,} bytes)")
+        else:
+            print(f"   ❌ Missing {file_path.name}")
+            return False
+    
+    # Write merged firmware
+    with open(output_file, 'wb') as f:
+        f.write(merged_data)
+    
+    print(f"✅ Created merged firmware: {output_file} ({len(merged_data):,} bytes)")
+    return True
+
 def extract_firmware_components(source, target, env):
     """
     Post-build script to extract ESP32 firmware components for web flashing
@@ -101,6 +147,11 @@ def extract_firmware_components(source, target, env):
     for component in firmware_dir.glob("*.bin"):
         size = component.stat().st_size
         print(f"   {component.name}: {size:,} bytes")
+    
+    # 5. Create merged firmware for ESP Web Tools compatibility
+    # This provides an alternative single-file approach as per ESP Web Tools spec
+    merged_firmware = firmware_dir / "teams-redlight-merged.bin"
+    create_merged_firmware(firmware_dir, merged_firmware)
     
     print("✅ Firmware extraction completed successfully!")
 
