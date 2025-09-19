@@ -615,6 +615,20 @@
                 <h2>✅ Flashing Complete!</h2>
                 <p>Your ESP32 has been successfully flashed with Teams Red Light firmware.</p>
                 <p>The device will restart automatically. Follow the "Next Steps" below to complete setup.</p>
+                
+                <div style="background: rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; margin: 20px 0; text-align: left;">
+                    <h4 style="margin-top: 0; color: #ffc107;">⚠️ If Your ESP32 Won't Boot After Flashing</h4>
+                    <p>If you see errors like "invalid header: 0xffffffff" or boot failures, this indicates incomplete firmware flashing.</p>
+                    <p><strong>Solutions:</strong></p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Make sure you're using the latest firmware (version 1.0.6+) which includes complete bootloader</li>
+                        <li>Try flashing again - the new firmware includes all required ESP32 components</li>
+                        <li>If still failing, try holding BOOT button during the entire flash process</li>
+                        <li>Check that your USB cable supports data transfer (not just charging)</li>
+                    </ul>
+                    <p>The latest firmware now includes bootloader, partition table, and application in one complete package.</p>
+                </div>
+                
                 <div style="margin-top: 20px;">
                     <button onclick="location.reload()" style="background: rgba(255,255,255,0.2); border: 2px solid white; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 16px;">
                         Flash Another Device

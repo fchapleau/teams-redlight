@@ -130,6 +130,7 @@ jobs:
         echo "Building ESP32 firmware..."
         pio run -e esp32dev || echo "Build failed - may be due to network restrictions"
         pio run -e esp32dev_debug || echo "Debug build failed - may be due to network restrictions"
+        pio run -e esp32dev_web || echo "Web build failed - may be due to network restrictions"
     
     - name: Skip firmware build (PlatformIO not accessible)
       run: |
@@ -141,12 +142,19 @@ jobs:
       run: |
         mkdir -p release
         
+        # Copy application firmware
         if [ -f .pio/build/esp32dev/firmware.bin ]; then
           cp .pio/build/esp32dev/firmware.bin release/teams-redlight-firmware.bin
         fi
         
         if [ -f .pio/build/esp32dev_debug/firmware.bin ]; then
           cp .pio/build/esp32dev_debug/firmware.bin release/teams-redlight-firmware-debug.bin
+        fi
+        
+        # Copy complete firmware components from web build (if available)
+        if [ -d firmware ]; then
+          echo "Copying ESP32 firmware components for web flashing..."
+          cp -r firmware/* release/ 2>/dev/null || echo "No firmware components found"
         fi
         
         # Create version info
@@ -211,6 +219,9 @@ jobs:
           # Download firmware binaries from latest release
           FIRMWARE_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*teams-redlight-firmware\.bin"' | cut -d'"' -f4)
           DEBUG_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*teams-redlight-firmware-debug\.bin"' | cut -d'"' -f4)
+          BOOTLOADER_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*bootloader_dio_40m\.bin"' | cut -d'"' -f4)
+          PARTITIONS_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*partitions\.bin"' | cut -d'"' -f4)
+          BOOTAPP_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*boot_app0\.bin"' | cut -d'"' -f4)
           INFO_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*build-info\.txt"' | cut -d'"' -f4)
           
           if [ ! -z "$FIRMWARE_URL" ]; then
@@ -223,6 +234,24 @@ jobs:
             echo "📥 Downloading debug firmware from release..."
             curl -L -o firmware/teams-redlight-firmware-debug.bin "$DEBUG_URL"
             echo "✅ Downloaded debug firmware ($(du -h firmware/teams-redlight-firmware-debug.bin | cut -f1))"
+          fi
+          
+          if [ ! -z "$BOOTLOADER_URL" ]; then
+            echo "📥 Downloading bootloader from release..."
+            curl -L -o firmware/bootloader_dio_40m.bin "$BOOTLOADER_URL"
+            echo "✅ Downloaded bootloader ($(du -h firmware/bootloader_dio_40m.bin | cut -f1))"
+          fi
+          
+          if [ ! -z "$PARTITIONS_URL" ]; then
+            echo "📥 Downloading partition table from release..."
+            curl -L -o firmware/partitions.bin "$PARTITIONS_URL"
+            echo "✅ Downloaded partition table ($(du -h firmware/partitions.bin | cut -f1))"
+          fi
+          
+          if [ ! -z "$BOOTAPP_URL" ]; then
+            echo "📥 Downloading boot_app0 from release..."
+            curl -L -o firmware/boot_app0.bin "$BOOTAPP_URL"
+            echo "✅ Downloaded boot_app0 ($(du -h firmware/boot_app0.bin | cut -f1))"
           fi
           
           if [ ! -z "$INFO_URL" ]; then
@@ -259,6 +288,22 @@ jobs:
           if [ -f "firmware/teams-redlight-firmware-debug.bin" ]; then
             cp firmware/teams-redlight-firmware-debug.bin _site/firmware/
             echo "✅ Copied debug firmware ($(du -h firmware/teams-redlight-firmware-debug.bin | cut -f1))"
+          fi
+          
+          # Copy ESP32 bootloader components
+          if [ -f "firmware/bootloader_dio_40m.bin" ]; then
+            cp firmware/bootloader_dio_40m.bin _site/firmware/
+            echo "✅ Copied bootloader ($(du -h firmware/bootloader_dio_40m.bin | cut -f1))"
+          fi
+          
+          if [ -f "firmware/partitions.bin" ]; then
+            cp firmware/partitions.bin _site/firmware/
+            echo "✅ Copied partition table ($(du -h firmware/partitions.bin | cut -f1))"
+          fi
+          
+          if [ -f "firmware/boot_app0.bin" ]; then
+            cp firmware/boot_app0.bin _site/firmware/
+            echo "✅ Copied boot_app0 ($(du -h firmware/boot_app0.bin | cut -f1))"
           fi
           
           if [ -f "firmware/build-info.txt" ]; then
