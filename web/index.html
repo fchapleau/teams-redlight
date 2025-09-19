@@ -751,17 +751,23 @@
                 lastChipIdValue = value;
                 chipIdResponseReceived = true;
                 
-                // Validate ESP32 chip ID
+                // Validate ESP32 chip ID with enhanced logging
                 if (isValidESP32ChipId(value)) {
-                    log('✅ Valid ESP32 chip detected');
+                    const chipType = getESP32ChipType(value);
+                    log(`✅ Valid ESP32 chip detected: ${chipType} (ID: 0x${value.toString(16)})`);
                 } else {
                     // Handle the specific case mentioned in the issue
                     if (value === 0x6465) {
-                        log('❌ Detected chip ID 0x6465 - This indicates a communication protocol error');
-                        log('💡 This usually means the ESP32 is not in bootloader mode');
-                        log('💡 Try pressing the BOOT button or check the connection');
+                        log('❌ Detected chip ID 0x6465 - ESP32 NOT in bootloader mode');
+                        log('🔍 Analysis: This specific value indicates the ESP32 is running normal firmware');
+                        log('💡 Solution: ESP32 needs to be put into download/bootloader mode');
+                        log('🔧 Action required: Manual BOOT button press or automatic reset sequence');
+                    } else if (value === 0x0000 || value === null) {
+                        log('❌ No chip ID response - possible communication issue');
+                        log('🔍 Check USB connection and ESP32 power');
                     } else {
-                        log(`⚠️ Unexpected chip ID: 0x${value.toString(16)} - May still be compatible`);
+                        log(`⚠️ Unexpected chip ID: 0x${value.toString(16)}`);
+                        log('🔍 This may be a valid ESP32 variant or indicate a communication issue');
                     }
                 }
             } else if (command === 0x08) { // SYNC response
@@ -774,6 +780,29 @@
                     log(`⚠️ Bootloader command 0x${command.toString(16)} returned status: 0x${statusByte.toString(16)}`);
                 }
             }
+        }
+
+        function getESP32ChipType(chipId) {
+            const chipTypes = {
+                0x00000000: 'ESP32 (Revision 0)',
+                0x00000001: 'ESP32 (Revision 1)', 
+                0x00000002: 'ESP32 (Revision 2)',
+                0x00000003: 'ESP32 (Revision 3)',
+                0x0000FFFF: 'ESP32-S2',
+                0x0000FFFE: 'ESP32-S3', 
+                0x0000FFFD: 'ESP32-C3'
+            };
+            
+            if (chipTypes[chipId]) {
+                return chipTypes[chipId];
+            }
+            
+            // Check if it looks like an ESP32 variant based on upper bits
+            if ((chipId & 0xFFFF0000) === 0x00000000) {
+                return `ESP32 (Unknown revision: ${chipId & 0xFFFF})`;
+            }
+            
+            return `Unknown ESP32 variant (0x${chipId.toString(16)})`;
         }
 
         function isValidESP32ChipId(chipId) {
@@ -922,8 +951,59 @@
             }
         }
 
+        async function performBootloaderResetSequence() {
+            if (!port) {
+                throw new Error('No serial port connected');
+            }
+            
+            log('🔧 Performing enhanced bootloader reset sequence...');
+            
+            try {
+                // Clear any pending serial data first
+                await clearSerialBuffer();
+                
+                // Enhanced reset sequence with multiple timing variations
+                // Sequence 1: Quick reset
+                await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                await delay(50);
+                await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+                await delay(100);
+                await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+                await delay(100);
+                await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                await delay(300);
+                
+                // Sequence 2: Extended hold sequence 
+                await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+                await delay(200);
+                await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+                await delay(500);
+                await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                await delay(100);
+                
+                // Sequence 3: ESP32-specific timing (some boards are sensitive)
+                await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                await delay(100);
+                await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+                await delay(50);
+                await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+                await delay(50);
+                await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+                await delay(200);
+                await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                await delay(1000); // Longer stabilization time
+                
+                log('✅ Enhanced bootloader reset sequence completed');
+                
+            } catch (error) {
+                log(`❌ Enhanced reset sequence failed: ${error.message}`);
+                throw error;
+            }
+        }
+
         async function readChipIdWithRetry() {
-            const maxAttempts = 5;
+            const maxAttempts = 8; // Increased attempts for better reliability
+            let consecutiveInvalidChipIds = 0;
             
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 log(`🔍 Reading chip ID (attempt ${attempt}/${maxAttempts})...`);
@@ -934,19 +1014,45 @@
                         return true;
                     }
                     
-                    // If we got invalid chip ID 0x6465, wait and retry
+                    // Enhanced handling for 0x6465 chip ID error
                     if (lastChipIdValue === 0x6465) {
-                        log(`⚠️ Got invalid chip ID 0x6465 on attempt ${attempt}, retrying...`);
-                        await delay(500);
+                        consecutiveInvalidChipIds++;
+                        log(`⚠️ Got invalid chip ID 0x6465 on attempt ${attempt} (consecutive: ${consecutiveInvalidChipIds})`);
+                        
+                        // If we get 3+ consecutive 0x6465 responses, try reset sequence
+                        if (consecutiveInvalidChipIds >= 3) {
+                            log('🔄 Multiple 0x6465 responses detected - attempting bootloader reset sequence...');
+                            try {
+                                await performBootloaderResetSequence();
+                                consecutiveInvalidChipIds = 0; // Reset counter after intervention
+                            } catch (resetError) {
+                                log(`⚠️ Bootloader reset sequence failed: ${resetError.message}`);
+                            }
+                        }
+                        
+                        // Progressive delay - longer waits for persistent issues
+                        const waitTime = Math.min(500 + (consecutiveInvalidChipIds * 200), 2000);
+                        await delay(waitTime);
                         continue;
+                    } else if (lastChipIdValue !== null) {
+                        // Reset counter if we get a different (but still invalid) chip ID
+                        consecutiveInvalidChipIds = 0;
                     }
                     
                 } catch (error) {
                     log(`❌ Chip ID read attempt ${attempt} failed: ${error.message}`);
+                    consecutiveInvalidChipIds = 0; // Reset on communication errors
                     if (attempt < maxAttempts) {
                         await delay(300);
                     }
                 }
+            }
+            
+            // If we consistently get 0x6465, provide specific guidance
+            if (lastChipIdValue === 0x6465) {
+                log('❌ Persistent chip ID 0x6465 detected - ESP32 appears stuck in non-bootloader mode');
+                log('💡 This typically requires manual BOOT button intervention');
+                throw new Error('ESP32 not in bootloader mode (chip ID 0x6465). Manual BOOT button press required.');
             }
             
             return false;
@@ -1103,8 +1209,29 @@
                 document.getElementById('flashBtn').disabled = false;
                 document.getElementById('flashStatus').innerHTML = '<div style="color: #d73502;">❌ Flash failed: ' + error.message + '</div>';
                 
-                // Show manual bootloader instructions if automatic failed
-                if (error.message.includes('0x6465') || error.message.includes('bootloader') || error.message.includes('communication')) {
+                // Enhanced error handling with specific guidance for different scenarios
+                if (error.message.includes('0x6465')) {
+                    log('🔧 ESP32 bootloader mode issue detected - showing enhanced guidance');
+                    showManualBootloaderInstructions();
+                    
+                    // Offer to try advanced troubleshooting
+                    setTimeout(async () => {
+                        const retry = await showAdvancedTroubleshootingDialog();
+                        if (retry) {
+                            // User wants to try again after troubleshooting
+                            startFlashProcess();
+                        }
+                    }, 2000);
+                    
+                } else if (error.message.includes('bootloader') || error.message.includes('communication')) {
+                    log('📡 Communication issue detected - showing manual bootloader instructions');
+                    showManualBootloaderInstructions();
+                } else if (error.message.includes('Manual BOOT button press required')) {
+                    log('🔧 Manual intervention explicitly required');
+                    showManualBootloaderInstructions();
+                } else {
+                    // Generic error - still show basic instructions
+                    log('⚠️ Generic flash error - showing basic troubleshooting');
                     showManualBootloaderInstructions();
                 }
             }
@@ -1113,7 +1240,15 @@
         async function attemptFlashWithFallbacks() {
             const maxAttempts = 3;
             
-            // Strategy 1: Standard automatic bootloader entry
+            // Strategy 1: Quick communication test before any bootloader attempts
+            log('🔍 Performing initial communication test...');
+            if (await testBootloaderCommunication()) {
+                log('✅ ESP32 already in bootloader mode - proceeding with flash');
+                await flashFirmwareToESP32(firmwareData);
+                return;
+            }
+            
+            // Strategy 2: Standard automatic bootloader entry
             log('📱 Attempting automatic bootloader entry...');
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
@@ -1135,7 +1270,7 @@
                 }
             }
             
-            // Strategy 2: Extended timing bootloader entry
+            // Strategy 3: Extended timing bootloader entry
             log('📱 Attempting extended timing bootloader entry...');
             try {
                 await enterBootloaderModeExtended();
@@ -1150,7 +1285,37 @@
                 log(`⚠️ Extended timing attempt failed: ${error.message}`);
             }
             
-            // Strategy 3: Request manual bootloader entry
+            // Strategy 4: Alternative timing sequences for different ESP32 board types
+            log('📱 Attempting alternative timing sequences...');
+            const altTimingSequences = [
+                { name: 'NodeMCU-32S timing', delays: [150, 100, 150, 300] },
+                { name: 'ESP32-DevKitC timing', delays: [200, 50, 100, 500] },
+                { name: 'DOIT ESP32 timing', delays: [100, 200, 50, 800] }
+            ];
+            
+            for (const sequence of altTimingSequences) {
+                try {
+                    log(`🔧 Trying ${sequence.name}...`);
+                    await performAlternativeBootloaderSequence(sequence.delays);
+                    
+                    if (await testBootloaderCommunication()) {
+                        log(`✅ ${sequence.name} successful`);
+                        await flashFirmwareToESP32(firmwareData);
+                        return; // Success!
+                    }
+                } catch (error) {
+                    log(`⚠️ ${sequence.name} failed: ${error.message}`);
+                }
+            }
+            
+            // Strategy 5: Check if we're getting persistent 0x6465 and provide specific guidance
+            if (lastChipIdValue === 0x6465) {
+                log('❌ Persistent chip ID 0x6465 detected across all automatic attempts');
+                log('💡 This indicates the ESP32 is consistently not entering bootloader mode');
+                log('🔧 Manual BOOT button intervention is required');
+            }
+            
+            // Strategy 6: Request manual bootloader entry
             log('📱 Requesting manual bootloader entry...');
             const userConsent = await requestManualBootloaderMode();
             if (userConsent) {
@@ -1162,16 +1327,167 @@
                     log('✅ Manual bootloader entry successful');
                     await flashFirmwareToESP32(firmwareData);
                     return; // Success!
+                } else {
+                    // Even manual failed - provide additional guidance
+                    log('❌ Manual bootloader entry verification failed');
+                    if (lastChipIdValue === 0x6465) {
+                        await showAdvancedTroubleshootingDialog();
+                    }
                 }
             }
             
             // All strategies failed
-            throw new Error('Could not establish bootloader communication. Please ensure ESP32 is properly connected and try manual bootloader mode.');
+            const errorMsg = lastChipIdValue === 0x6465 
+                ? 'ESP32 consistently returning chip ID 0x6465 - not in bootloader mode. Please ensure you hold the BOOT button during reset.'
+                : 'Could not establish bootloader communication. Please ensure ESP32 is properly connected and try manual bootloader mode.';
+            throw new Error(errorMsg);
+        }
+
+        async function performAlternativeBootloaderSequence(delays) {
+            if (!port) {
+                throw new Error('No serial port connected');
+            }
+            
+            const [delay1, delay2, delay3, delay4] = delays;
+            
+            try {
+                await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                await delay(delay1);
+                
+                await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+                await delay(delay2);
+                
+                await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+                await delay(delay3);
+                
+                await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+                await delay(delay4);
+                
+                await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                await delay(200);
+                
+            } catch (error) {
+                throw new Error(`Alternative bootloader sequence failed: ${error.message}`);
+            }
+        }
+
+        async function showAdvancedTroubleshootingDialog() {
+            return new Promise((resolve) => {
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0,0,0,0.8);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 1000;
+                    overflow-y: auto;
+                `;
+                
+                modal.innerHTML = `
+                    <div style="background: white; padding: 30px; border-radius: 10px; max-width: 600px; max-height: 80vh; overflow-y: auto; margin: 20px;">
+                        <h3 style="color: #d73502; margin-top: 0;">🚨 Advanced Troubleshooting Required</h3>
+                        
+                        <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #ffc107;">
+                            <strong>Problem:</strong> ESP32 consistently returns chip ID 0x6465<br>
+                            <strong>Cause:</strong> ESP32 is not entering bootloader mode properly
+                        </div>
+                        
+                        <h4>Try these solutions in order:</h4>
+                        <ol style="line-height: 1.8;">
+                            <li><strong>Double-check button timing:</strong>
+                                <ul style="margin: 5px 0; padding-left: 20px;">
+                                    <li>Hold BOOT button BEFORE pressing EN/RST</li>
+                                    <li>Keep BOOT held while pressing and releasing EN/RST</li>
+                                    <li>Only release BOOT after EN/RST is released</li>
+                                </ul>
+                            </li>
+                            <li><strong>Verify button locations:</strong>
+                                <ul style="margin: 5px 0; padding-left: 20px;">
+                                    <li>BOOT: May be labeled "BOOT", "IO0", "FLASH", or "GPIO0"</li>
+                                    <li>EN/RST: May be labeled "EN", "RST", "RESET", or "ENABLE"</li>
+                                </ul>
+                            </li>
+                            <li><strong>Try different timing:</strong>
+                                <ul style="margin: 5px 0; padding-left: 20px;">
+                                    <li>Hold BOOT for 3 seconds before pressing EN/RST</li>
+                                    <li>Hold EN/RST for 1 second before releasing</li>
+                                    <li>Wait 2 seconds before releasing BOOT</li>
+                                </ul>
+                            </li>
+                            <li><strong>Check hardware:</strong>
+                                <ul style="margin: 5px 0; padding-left: 20px;">
+                                    <li>Try a different USB cable</li>
+                                    <li>Try a different USB port</li>
+                                    <li>Ensure no loose connections</li>
+                                </ul>
+                            </li>
+                            <li><strong>Power cycle:</strong>
+                                <ul style="margin: 5px 0; padding-left: 20px;">
+                                    <li>Disconnect USB completely</li>
+                                    <li>Wait 5 seconds</li>
+                                    <li>Reconnect and try again</li>
+                                </ul>
+                            </li>
+                        </ol>
+                        
+                        <div style="background: #d1ecf1; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #17a2b8;">
+                            <strong>Still having issues?</strong><br>
+                            Some ESP32 boards have different button behaviors or may require external pullup resistors. 
+                            Check your specific board's documentation.
+                        </div>
+                        
+                        <div style="text-align: center; margin-top: 20px;">
+                            <button onclick="tryAgainAfterTroubleshooting()" style="background: #d73502; color: white; padding: 12px 20px; border: none; border-radius: 5px; margin-right: 10px; cursor: pointer;">
+                                Try Flashing Again
+                            </button>
+                            <button onclick="closeTroubleshooting()" style="background: #666; color: white; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer;">
+                                Give Up
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                
+                window.tryAgainAfterTroubleshooting = () => {
+                    document.body.removeChild(modal);
+                    delete window.tryAgainAfterTroubleshooting;
+                    delete window.closeTroubleshooting;
+                    resolve(true);
+                };
+                
+                window.closeTroubleshooting = () => {
+                    document.body.removeChild(modal);
+                    delete window.tryAgainAfterTroubleshooting;
+                    delete window.closeTroubleshooting;
+                    resolve(false);
+                };
+            });
         }
 
         async function testBootloaderCommunication() {
             try {
                 log('🔍 Testing bootloader communication...');
+                
+                // First, check if we can read a valid chip ID without sync
+                const quickTest = await readChipId();
+                if (quickTest && lastChipIdValue !== 0x6465) {
+                    log('✅ Quick chip ID test passed');
+                    return true;
+                }
+                
+                // If quick test failed with 0x6465, we know we need bootloader mode
+                if (lastChipIdValue === 0x6465) {
+                    log('⚠️ Quick test shows ESP32 not in bootloader mode (0x6465)');
+                    return false;
+                }
+                
+                // Perform full sync test
                 await syncWithBootloader();
                 return true;
             } catch (error) {
@@ -1229,23 +1545,55 @@
                     z-index: 1000;
                 `;
                 
+                const warningMessage = lastChipIdValue === 0x6465 
+                    ? `<div style="background: #fff3cd; padding: 10px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107;">
+                        <strong>⚠️ Detected Issue:</strong> ESP32 is returning chip ID 0x6465<br>
+                        This means it's not in bootloader mode and requires manual intervention.
+                       </div>`
+                    : '';
+                
                 modal.innerHTML = `
-                    <div style="background: white; padding: 30px; border-radius: 10px; max-width: 500px; text-align: center;">
+                    <div style="background: white; padding: 30px; border-radius: 10px; max-width: 550px; text-align: center;">
                         <h3 style="color: #d73502; margin-top: 0;">🔧 Manual Bootloader Mode Required</h3>
-                        <p>Automatic bootloader entry failed. Please follow these steps:</p>
-                        <ol style="text-align: left; margin: 20px 0;">
-                            <li><strong>Hold</strong> the BOOT button on your ESP32</li>
-                            <li><strong>Press and release</strong> the EN/RST button</li>
-                            <li><strong>Release</strong> the BOOT button</li>
-                            <li><strong>Click Continue</strong> below</li>
-                        </ol>
-                        <p style="font-size: 0.9em; color: #666;">The ESP32 should now be in bootloader mode and ready for flashing.</p>
+                        
+                        ${warningMessage}
+                        
+                        <p><strong>Automatic bootloader entry failed.</strong> Please follow these steps carefully:</p>
+                        
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; text-align: left; margin: 15px 0;">
+                            <strong>Step-by-step instructions:</strong>
+                            <ol style="margin: 10px 0; line-height: 1.6;">
+                                <li><strong>Locate buttons:</strong> Find the BOOT and EN/RST buttons on your ESP32</li>
+                                <li><strong>Hold BOOT:</strong> Press and keep holding the BOOT button</li>
+                                <li><strong>Press EN/RST:</strong> While still holding BOOT, press the EN/RST button</li>
+                                <li><strong>Release EN/RST:</strong> Release the EN/RST button (keep holding BOOT)</li>
+                                <li><strong>Release BOOT:</strong> Now release the BOOT button</li>
+                                <li><strong>Click Continue:</strong> The ESP32 should now be in bootloader mode</li>
+                            </ol>
+                        </div>
+                        
+                        <div style="background: #e7f3ff; padding: 10px; border-radius: 5px; margin: 10px 0; font-size: 0.9em;">
+                            <strong>Button Labels Vary:</strong><br>
+                            BOOT: May be labeled "BOOT", "IO0", "FLASH", or "GPIO0"<br>
+                            EN/RST: May be labeled "EN", "RST", "RESET", or "ENABLE"
+                        </div>
+                        
+                        <p style="font-size: 0.9em; color: #666; margin: 15px 0;">
+                            If successful, the ESP32 will be ready for flashing and you should see different messages in the console.
+                        </p>
+                        
                         <div style="margin-top: 20px;">
-                            <button onclick="continueFlash()" style="background: #d73502; color: white; padding: 10px 20px; border: none; border-radius: 5px; margin-right: 10px; cursor: pointer;">
-                                Continue Flash
+                            <button onclick="continueFlash()" style="background: #d73502; color: white; padding: 12px 24px; border: none; border-radius: 5px; margin-right: 10px; cursor: pointer; font-weight: bold;">
+                                ✅ Continue Flash
                             </button>
-                            <button onclick="cancelFlash()" style="background: #666; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
-                                Cancel
+                            <button onclick="cancelFlash()" style="background: #666; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer;">
+                                ❌ Cancel
+                            </button>
+                        </div>
+                        
+                        <div style="margin-top: 15px;">
+                            <button onclick="showDetailedHelp()" style="background: #007bff; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
+                                🔧 Show Detailed Help
                             </button>
                         </div>
                     </div>
@@ -1257,6 +1605,7 @@
                     document.body.removeChild(modal);
                     delete window.continueFlash;
                     delete window.cancelFlash;
+                    delete window.showDetailedHelp;
                     resolve(true);
                 };
                 
@@ -1264,7 +1613,18 @@
                     document.body.removeChild(modal);
                     delete window.continueFlash;
                     delete window.cancelFlash;
+                    delete window.showDetailedHelp;
                     resolve(false);
+                };
+                
+                window.showDetailedHelp = () => {
+                    document.body.removeChild(modal);
+                    delete window.continueFlash;
+                    delete window.cancelFlash;
+                    delete window.showDetailedHelp;
+                    // Show the detailed help and then ask again
+                    showBootloaderHelp();
+                    setTimeout(() => resolve(requestManualBootloaderMode()), 1000);
                 };
             });
         }
