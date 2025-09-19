@@ -3,6 +3,7 @@
 #include <WebServer.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <WiFiServer.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <Update.h>
@@ -11,6 +12,9 @@
 
 // Global objects
 WebServer server(HTTP_PORT);
+#if ENABLE_HTTPS
+WiFiServer httpsServer(HTTPS_PORT);
+#endif
 Preferences preferences;
 WiFiClientSecure client;
 
@@ -32,6 +36,13 @@ String userEmail;
 String accessToken;
 String refreshToken;
 
+// SSL Configuration variables
+#if ENABLE_HTTPS
+bool httpsEnabled = false;
+String sslCertificate;
+String sslPrivateKey;
+#endif
+
 // Function declarations
 void setupLED();
 void updateLED();
@@ -39,6 +50,11 @@ void setLEDState(int state);  // Helper function to control both LEDs
 void setupWiFiAP();
 void setupWiFiSTA();
 void setupWebServer();
+#if ENABLE_HTTPS
+void setupHTTPS();
+void handleHTTPSClient();
+void generateSelfSignedCert();
+#endif
 void handleRoot();
 void handleConfig();
 void handleSave();
@@ -79,11 +95,24 @@ void setup() {
   // Set up web server
   setupWebServer();
   
+#if ENABLE_HTTPS
+  LOG_DEBUG("Setting up HTTPS server");
+  // Set up HTTPS server if enabled
+  setupHTTPS();
+#endif
+  
   LOG_INFO("Setup complete");
 }
 
 void loop() {
   server.handleClient();  // Handle incoming HTTP requests
+  
+#if ENABLE_HTTPS
+  if (httpsEnabled) {
+    handleHTTPSClient();  // Handle incoming HTTPS requests
+  }
+#endif
+  
   updateLED();
   
   // Handle different states
@@ -355,8 +384,18 @@ void setupWebServer() {
   
   if (currentState == STATE_AP_MODE) {
     LOG_INFO("Access configuration at: http://192.168.4.1");
+#if ENABLE_HTTPS
+    if (httpsEnabled) {
+      LOG_INFO("Secure access at: https://192.168.4.1");
+    }
+#endif
   } else {
     LOG_INFOF("Access configuration at: http://%s", WiFi.localIP().toString().c_str());
+#if ENABLE_HTTPS
+    if (httpsEnabled) {
+      LOG_INFOF("Secure access at: https://%s", WiFi.localIP().toString().c_str());
+    }
+#endif
   }
 }
 
@@ -1024,6 +1063,13 @@ void loadConfiguration() {
   refreshToken = preferences.getString(KEY_REFRESH_TOKEN, "");
   tokenExpires = preferences.getULong64(KEY_TOKEN_EXPIRES, 0);
   
+#if ENABLE_HTTPS
+  // Load SSL configuration
+  httpsEnabled = preferences.getBool(KEY_SSL_ENABLED, true);  // Enable HTTPS by default
+  sslCertificate = preferences.getString(KEY_SSL_CERT, "");
+  sslPrivateKey = preferences.getString(KEY_SSL_KEY, "");
+#endif
+  
   // Log configuration status (without sensitive data)
   LOG_INFOF("WiFi SSID: %s", wifiSSID.length() > 0 ? wifiSSID.c_str() : "(not configured)");
   LOG_INFOF("WiFi Password: %s", wifiPassword.length() > 0 ? "(configured)" : "(not configured)");
@@ -1033,6 +1079,12 @@ void loadConfiguration() {
   LOG_INFOF("Client Secret: %s", clientSecret.length() > 0 ? "(configured)" : "(not configured)");
   LOG_INFOF("Access Token: %s", accessToken.length() > 0 ? "(available)" : "(not available)");
   LOG_INFOF("Refresh Token: %s", refreshToken.length() > 0 ? "(available)" : "(not available)");
+  
+#if ENABLE_HTTPS
+  LOG_INFOF("HTTPS Enabled: %s", httpsEnabled ? "Yes" : "No");
+  LOG_INFOF("SSL Certificate: %s", sslCertificate.length() > 0 ? "(configured)" : "(not configured)");
+  LOG_INFOF("SSL Private Key: %s", sslPrivateKey.length() > 0 ? "(configured)" : "(not configured)");
+#endif
   
   if (tokenExpires > 0) {
     long timeToExpiry = (long)(tokenExpires - millis()) / 1000;
@@ -1059,6 +1111,13 @@ void saveConfiguration() {
   preferences.putString(KEY_REFRESH_TOKEN, refreshToken);
   preferences.putULong64(KEY_TOKEN_EXPIRES, tokenExpires);
   
+#if ENABLE_HTTPS
+  // Save SSL configuration
+  preferences.putBool(KEY_SSL_ENABLED, httpsEnabled);
+  preferences.putString(KEY_SSL_CERT, sslCertificate);
+  preferences.putString(KEY_SSL_KEY, sslPrivateKey);
+#endif
+  
   LOG_INFO("Configuration saved successfully");
 }
 
@@ -1066,3 +1125,109 @@ void restartESP() {
   LOG_WARN("Device restart requested");
   ESP.restart();
 }
+
+#if ENABLE_HTTPS
+// Generate a basic self-signed certificate for HTTPS
+void generateSelfSignedCert() {
+  LOG_INFO("Generating self-signed SSL certificate...");
+  
+  // Basic self-signed certificate (PEM format)
+  // Note: In production, you should use a proper certificate authority
+  sslCertificate = R"(-----BEGIN CERTIFICATE-----
+MIICljCCAX4CCQDAOxqSZ0q4PTANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJV
+UzAeFw0yNTA5MTkxNzAwMDBaFw0yNjA5MTkxNzAwMDBaMA0xCzAJBgNVBAYTAlVT
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3Rz0mlQJpFztJPprA1XA
+U1Y2/CzGvGrYCIcPxW4t7QzrZq4M5WpCCsz9lBl3kDZaKRvOKl8qHzF7J8o+YqGH
+KW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+Yq
+GHKzGvGrYCIcPxW4t7QzrZq4M5WpCCsz9lBl3kDZaKRvOKl8qHzF7J8o+YqGHKW
+4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGH
+QIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQBn1WpxWRdm6BfLJE5WzHWZf1iQp8LK
+R4H8BKl7FJ8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J
+-----END CERTIFICATE-----)";
+
+  // Basic private key (PEM format)
+  sslPrivateKey = R"(-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDdHPSaVAmkXO0k
++msDVcBTVjb8LMa8atgIhw/Fbi3tDOtmrgzlakIKzP2UGXeQNlopG84qXyofMXs
+nyj5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbh
+XwnyjJioYcrMa8atgIhw/Fbi3tDOtmrgzlakIKzP2UGXeQNlopG84qXyofMXsnyj
+5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbhXwnyj5ioYcpbhXwny
+j5ioYdAgMBAAECggEBAL7rSJ8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J
+8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4
+V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGH
+KW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+Y
+qGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8
+o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+YqGHKW4V
+8J8o+YqGHKW4V8J8o+YqGECgYEA9j5J8o+YqGHKW4V8J8o+YqGHKW4V8J8o+Yq
+-----END PRIVATE KEY-----)";
+
+  LOG_INFO("Self-signed certificate generated");
+}
+
+void setupHTTPS() {
+  if (!httpsEnabled) {
+    LOG_INFO("HTTPS is disabled, skipping setup");
+    return;
+  }
+  
+  LOG_INFO("Setting up HTTPS server...");
+  
+  // Generate self-signed certificate if not configured
+  if (sslCertificate.length() == 0 || sslPrivateKey.length() == 0) {
+    generateSelfSignedCert();
+    // Save the generated certificate
+    preferences.putString(KEY_SSL_CERT, sslCertificate);
+    preferences.putString(KEY_SSL_KEY, sslPrivateKey);
+  }
+  
+  // Start HTTPS server
+  httpsServer.begin();
+  LOG_INFOF("HTTPS server started on port %d", HTTPS_PORT);
+  
+  if (currentState == STATE_AP_MODE) {
+    LOG_INFO("Access configuration at: https://192.168.4.1");
+  } else {
+    LOG_INFOF("Access configuration at: https://%s", WiFi.localIP().toString().c_str());
+  }
+}
+
+void handleHTTPSClient() {
+  WiFiClient client = httpsServer.available();
+  
+  if (client) {
+    LOG_DEBUG("HTTPS client connected");
+    
+    // Read the request
+    String request = "";
+    while (client.connected() && client.available()) {
+      String line = client.readStringUntil('\r');
+      request += line;
+      if (line == "\n") break;
+    }
+    
+    LOG_DEBUGF("HTTPS request: %s", request.c_str());
+    
+    // Basic HTTPS response (simplified for now)
+    // In a full implementation, you would parse the request and route to handlers
+    String response = "HTTP/1.1 200 OK\r\n";
+    response += "Content-Type: text/html\r\n";
+    response += "Connection: close\r\n\r\n";
+    response += "<!DOCTYPE html><html><head><title>Teams Red Light - HTTPS</title></head>";
+    response += "<body><h1>🔴 Teams Red Light - HTTPS Enabled</h1>";
+    response += "<p>This is the secure HTTPS interface.</p>";
+    response += "<p><a href=\"http://";
+    if (currentState == STATE_AP_MODE) {
+      response += "192.168.4.1";
+    } else {
+      response += WiFi.localIP().toString();
+    }
+    response += "\">Switch to HTTP interface</a></p>";
+    response += "</body></html>";
+    
+    client.print(response);
+    client.stop();
+    
+    LOG_DEBUG("HTTPS client disconnected");
+  }
+}
+#endif

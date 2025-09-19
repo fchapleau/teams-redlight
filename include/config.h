@@ -20,6 +20,7 @@
 // Network Configuration
 #define HTTP_PORT 80
 #define HTTPS_PORT 443
+#define ENABLE_HTTPS true   // Enable HTTPS support
 
 // Microsoft Graph API Configuration
 #define GRAPH_API_HOST "graph.microsoft.com"
@@ -37,6 +38,11 @@
 #define KEY_ACCESS_TOKEN "access_token"
 #define KEY_REFRESH_TOKEN "refresh_token"
 #define KEY_TOKEN_EXPIRES "token_expires"
+
+// SSL Certificate Storage Keys
+#define KEY_SSL_CERT "ssl_cert"
+#define KEY_SSL_KEY "ssl_key"
+#define KEY_SSL_ENABLED "ssl_enabled"
 
 // Update Configuration
 #define OTA_UPDATE_URL_KEY "ota_url"
