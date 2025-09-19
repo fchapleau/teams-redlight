@@ -11,6 +11,11 @@ lib/
 *.elf
 *.map
 
+# Generated firmware and deployment directories
+firmware/
+release/
+_site/
+
 # IDE files
 .idea/
 *.sublime-*
