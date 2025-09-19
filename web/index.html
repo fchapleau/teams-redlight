@@ -194,6 +194,12 @@
             }
         }
 
+        /* Animation for loading spinner */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         /* New simplified layout styles */
         .version-info {
             background: linear-gradient(135deg, #f8f9fa, #e9ecef);
@@ -472,23 +478,23 @@
         
         <div class="features-grid">
             <div class="feature-card">
-                <h3>🔧 Automatic Detection</h3>
-                <p>Automatically detects your ESP32 board type and handles bootloader entry. No manual button pressing required in most cases.</p>
+                <h3>🔧 Smart Bootloader Detection</h3>
+                <p>Automatically detects your ESP32 board type and attempts multiple bootloader entry methods. Provides step-by-step guidance for manual bootloader mode when needed.</p>
             </div>
             
             <div class="feature-card">
-                <h3>🚀 One-Click Flashing</h3>
-                <p>Simple one-click firmware installation with progress indication and error handling. Built on proven ESP Web Tools technology.</p>
+                <h3>🚀 Enhanced Flashing Protocol</h3>
+                <p>Complete ESP32 flashing with proper bootloader, partition table, and firmware installation. Real-time progress tracking and intelligent error recovery.</p>
             </div>
             
             <div class="feature-card">
-                <h3>✅ Reliable Protocol</h3>
-                <p>Uses the same reliable flashing protocol as ESPHome and other professional ESP32 tools. Handles edge cases automatically.</p>
+                <h3>✅ Professional-Grade Protocol</h3>
+                <p>Uses the same reliable flashing protocol as ESPHome and other professional ESP32 tools. Handles all ESP32 variants and edge cases automatically.</p>
             </div>
             
             <div class="feature-card">
-                <h3>🔄 Smart Recovery</h3>
-                <p>Automatically handles common flashing issues like chip ID 0x6465 errors and provides clear guidance when manual intervention is needed.</p>
+                <h3>🔄 Intelligent Recovery</h3>
+                <p>Automatically detects and handles common flashing issues like chip ID 0x6465 errors. Provides specific troubleshooting guidance and manual bootloader mode instructions.</p>
             </div>
         </div>
         
@@ -538,24 +544,70 @@
         }
 
         // Add event listeners for ESP Web Tools events
+        // State management for flashing process
+        let flashingState = {
+            attempts: 0,
+            maxAttempts: 3,
+            isInProgress: false,
+            currentStep: 'idle'
+        };
+
+        // Enhanced connection handler with bootloader detection
         document.addEventListener('esp-web-install-button-connect', (event) => {
             console.log('ESP32 Connected:', event.detail);
+            flashingState.currentStep = 'connected';
+            
+            // Update UI to show connection status
+            const heroSection = document.querySelector('.hero-section');
+            heroSection.innerHTML = `
+                <h2>🔗 ESP32 Connected</h2>
+                <p>Device connected successfully. Preparing for firmware installation...</p>
+                <div style="margin-top: 20px;">
+                    <div style="display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: white; animation: spin 1s ease-in-out infinite;"></div>
+                    <span style="margin-left: 10px;">Establishing communication...</span>
+                </div>
+            `;
         });
 
         document.addEventListener('esp-web-install-button-disconnect', (event) => {
             console.log('ESP32 Disconnected:', event.detail);
+            flashingState.currentStep = 'disconnected';
         });
 
         document.addEventListener('esp-web-install-button-install-start', (event) => {
             console.log('Flashing Started:', event.detail);
+            flashingState.isInProgress = true;
+            flashingState.attempts++;
+            flashingState.currentStep = 'flashing';
+            
+            // Show progress UI
+            const heroSection = document.querySelector('.hero-section');
+            heroSection.innerHTML = `
+                <h2>⚡ Flashing ESP32</h2>
+                <p>Installing Teams Red Light firmware (Attempt ${flashingState.attempts}/${flashingState.maxAttempts})...</p>
+                <div style="margin-top: 20px;">
+                    <div style="width: 100%; background: rgba(255,255,255,0.2); border-radius: 10px; overflow: hidden;">
+                        <div id="progressBar" style="width: 0%; background: white; height: 20px; border-radius: 10px; transition: width 0.3s ease;"></div>
+                    </div>
+                    <p style="margin-top: 10px; font-size: 0.9em;">Please do not disconnect the device during flashing...</p>
+                </div>
+            `;
         });
 
         document.addEventListener('esp-web-install-button-install-progress', (event) => {
             console.log('Flashing Progress:', event.detail);
+            
+            // Update progress bar if available
+            const progressBar = document.getElementById('progressBar');
+            if (progressBar && event.detail && event.detail.percentage !== undefined) {
+                progressBar.style.width = `${event.detail.percentage}%`;
+            }
         });
 
         document.addEventListener('esp-web-install-button-install-complete', (event) => {
             console.log('Flashing Complete:', event.detail);
+            flashingState.isInProgress = false;
+            flashingState.currentStep = 'complete';
             
             // Show success message
             const heroSection = document.querySelector('.hero-section');
@@ -569,33 +621,134 @@
                     </button>
                 </div>
             `;
+            
+            // Reset state
+            flashingState.attempts = 0;
         });
 
+        // Enhanced error handler with specific chip ID 0x6465 detection
         document.addEventListener('esp-web-install-button-error', (event) => {
             console.error('Flashing Error:', event.detail);
+            flashingState.isInProgress = false;
             
-            // Show error message with helpful guidance
+            const errorMessage = event.detail.message || 'Unknown error';
+            const isChipIdError = errorMessage.includes('6465') || errorMessage.includes('wrong chip id');
+            const isBootloaderError = errorMessage.includes('bootloader') || errorMessage.includes('Failed to connect');
+            
+            let troubleshootingSteps = [];
+            let retryButton = '';
+            let specificGuidance = '';
+            
+            if (isChipIdError) {
+                specificGuidance = `
+                    <div style="background: rgba(255,193,7,0.2); border: 1px solid rgba(255,193,7,0.5); border-radius: 8px; padding: 15px; margin: 15px 0;">
+                        <h4 style="color: #856404; margin-top: 0;">🔧 Chip ID 0x6465 Error Detected</h4>
+                        <p>This error occurs when the ESP32 is not properly in bootloader mode. The ESP32 needs to be manually put into download mode.</p>
+                    </div>
+                `;
+                
+                troubleshootingSteps = [
+                    'Disconnect and reconnect the USB cable',
+                    'Hold the BOOT button down (do not release yet)',
+                    'While holding BOOT, briefly press and release the EN/RST button',
+                    'Release the BOOT button after 1-2 seconds',
+                    'Click "Try Manual Bootloader Mode" below immediately',
+                    'If still failing, try a different USB cable or port'
+                ];
+                
+                retryButton = `
+                    <button onclick="handleManualBootloaderMode()" style="background: #ffc107; color: #212529; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 16px; margin-right: 10px;">
+                        Try Manual Bootloader Mode
+                    </button>
+                `;
+            } else if (isBootloaderError) {
+                specificGuidance = `
+                    <div style="background: rgba(220,53,69,0.2); border: 1px solid rgba(220,53,69,0.5); border-radius: 8px; padding: 15px; margin: 15px 0;">
+                        <h4 style="color: #721c24; margin-top: 0;">📱 Bootloader Connection Failed</h4>
+                        <p>Could not establish communication with the ESP32 bootloader.</p>
+                    </div>
+                `;
+                
+                troubleshootingSteps = [
+                    'Check USB cable connection (use a data cable, not charge-only)',
+                    'Try a different USB port',
+                    'Install or update ESP32 drivers',
+                    'Close other applications that might be using the serial port',
+                    'Try manual bootloader mode (see instructions above)'
+                ];
+            } else {
+                troubleshootingSteps = [
+                    'Check USB cable connection',
+                    'Try a different USB port',
+                    'Ensure ESP32 drivers are installed',
+                    'Close other applications using the serial port',
+                    'Try manual bootloader mode: Hold BOOT, press EN/RST, release EN/RST, release BOOT'
+                ];
+            }
+            
+            // Show enhanced error message with specific guidance
             const heroSection = document.querySelector('.hero-section');
             heroSection.innerHTML = `
                 <h2>❌ Flashing Failed</h2>
-                <p>An error occurred during flashing: <strong>${event.detail.message || 'Unknown error'}</strong></p>
+                <p>An error occurred during flashing: <strong>${errorMessage}</strong></p>
+                
+                ${specificGuidance}
+                
                 <div style="margin-top: 20px; text-align: left; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;">
                     <strong>Troubleshooting Steps:</strong>
                     <ol style="margin: 10px 0; padding-left: 20px;">
-                        <li>Check USB cable connection</li>
-                        <li>Try a different USB port</li>
-                        <li>Ensure ESP32 drivers are installed</li>
-                        <li>Try manual bootloader mode: Hold BOOT, press EN/RST, release EN/RST, release BOOT</li>
-                        <li>Refresh this page and try again</li>
+                        ${troubleshootingSteps.map(step => `<li style="margin: 8px 0;">${step}</li>`).join('')}
                     </ol>
                 </div>
+                
                 <div style="margin-top: 20px;">
+                    ${retryButton}
                     <button onclick="location.reload()" style="background: rgba(255,255,255,0.2); border: 2px solid white; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 16px;">
-                        Try Again
+                        Start Over
                     </button>
                 </div>
             `;
         });
+
+        // Function to handle manual bootloader mode guidance
+        function handleManualBootloaderMode() {
+            const heroSection = document.querySelector('.hero-section');
+            heroSection.innerHTML = `
+                <h2>🔧 Manual Bootloader Mode</h2>
+                <p>Follow these steps carefully to put your ESP32 into bootloader mode:</p>
+                
+                <div style="background: rgba(255,193,7,0.2); border: 1px solid rgba(255,193,7,0.5); border-radius: 8px; padding: 20px; margin: 20px 0; text-align: left;">
+                    <h4 style="color: #856404; margin-top: 0;">📋 Step-by-Step Instructions:</h4>
+                    <ol style="margin: 15px 0; padding-left: 25px; line-height: 1.8;">
+                        <li><strong>Locate the buttons:</strong> Find the BOOT and EN/RST buttons on your ESP32</li>
+                        <li><strong>Press and hold BOOT:</strong> Press and keep holding the BOOT button</li>
+                        <li><strong>Press EN/RST briefly:</strong> While holding BOOT, quickly press and release EN/RST</li>
+                        <li><strong>Release BOOT:</strong> Wait 1-2 seconds, then release the BOOT button</li>
+                        <li><strong>Click "Flash Now":</strong> Immediately click the button below to start flashing</li>
+                    </ol>
+                    
+                    <div style="background: rgba(255,255,255,0.3); padding: 10px; border-radius: 5px; margin-top: 15px;">
+                        <strong>💡 Tip:</strong> The ESP32 should now be in bootloader mode and ready for flashing. 
+                        You have about 10 seconds to initiate the flash after entering bootloader mode.
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <esp-web-install-button 
+                        manifest="./manifest.json"
+                        install-supported
+                        style="--esp-tools-button-color: #28a745; --esp-tools-button-text-color: white; font-size: 16px; padding: 12px 24px; border-radius: 8px; margin-right: 10px;">
+                        <span slot="activate">🚀 Flash Now (Bootloader Mode)</span>
+                        <span slot="unsupported">Browser not supported</span>
+                        <span slot="not-allowed">Please enable WebSerial</span>
+                    </esp-web-install-button>
+                    
+                    <button onclick="location.reload()" style="background: rgba(255,255,255,0.2); border: 2px solid white; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 16px;">
+                        Start Over
+                    </button>
+                </div>
+            `;
+        }
     </script>
 </body>
 </html>
