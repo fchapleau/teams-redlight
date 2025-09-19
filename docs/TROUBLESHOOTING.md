@@ -77,15 +77,15 @@ permissions:
 
 **Problem:** GitHub Pages deployment fails with "Branch not allowed to deploy" error
 
-**Solution:** Environment protection rules restrict deployments to main branch only. The workflow includes a conditional to only deploy from main branch:
+**Solution:** Environment protection rules restrict deployments to main branch only. The workflow includes a conditional to only deploy from main branch and tag releases:
 ```yaml
 deploy-web:
-  if: github.ref == 'refs/heads/main' || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+  if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
 ```
 
 This ensures that:
 - Pull requests can run validation and build tests
-- Only main branch, releases, and manual triggers deploy to GitHub Pages
+- Only main branch, tag releases, releases, and manual triggers deploy to GitHub Pages
 - Feature branches don't attempt GitHub Pages deployment
 
 ## Runtime Issues
