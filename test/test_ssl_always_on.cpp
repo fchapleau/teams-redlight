@@ -1,32 +1,26 @@
 #include <unity.h>
 #include <Arduino.h>
+#include "config.h"
 
-// Test that SSL/HTTPS is always enabled
-void test_ssl_always_enabled() {
-    // Test that HTTPS is enabled by default
-    bool httpsEnabled = true;  // This mirrors the code change
-    TEST_ASSERT_TRUE(httpsEnabled);
+// Test HTTPS configuration state
+void test_https_disabled() {
+    // Test that HTTPS is disabled due to WiFiServerSecure not being available
+    bool httpsEnabled = ENABLE_HTTPS;
+    TEST_ASSERT_FALSE(httpsEnabled);
     
-    // Test HTTPS port configuration
-    const int HTTPS_PORT = 443;
-    TEST_ASSERT_EQUAL(443, HTTPS_PORT);
-    
-    // Test that HTTPS cannot be disabled
-    // (in the actual implementation, there's no longer a way to set httpsEnabled to false)
-    TEST_ASSERT_TRUE(httpsEnabled);  // Always true
+    // Test HTTPS port is still defined for future use
+    const int HTTPS_PORT_VALUE = HTTPS_PORT;
+    TEST_ASSERT_EQUAL(443, HTTPS_PORT_VALUE);
 }
 
-void test_https_configuration_removed() {
-    // Verify that HTTPS configuration options are not present
-    // This test validates that the user cannot disable HTTPS
+void test_http_port_available() {
+    // Verify that HTTP port is properly configured
+    const int HTTP_PORT_VALUE = HTTP_PORT;
+    TEST_ASSERT_EQUAL(80, HTTP_PORT_VALUE);
     
-    // Mock a configuration page check
-    bool hasHttpsCheckbox = false;  // Checkbox was removed
-    TEST_ASSERT_FALSE(hasHttpsCheckbox);
-    
-    // Mock configuration saving - HTTPS should not be affected by user input
-    bool httpsStaysEnabled = true;
-    TEST_ASSERT_TRUE(httpsStaysEnabled);
+    // HTTP functionality should be available
+    bool httpAvailable = true;
+    TEST_ASSERT_TRUE(httpAvailable);
 }
 
 void setup() {
@@ -34,8 +28,8 @@ void setup() {
     
     UNITY_BEGIN();
     
-    RUN_TEST(test_ssl_always_enabled);
-    RUN_TEST(test_https_configuration_removed);
+    RUN_TEST(test_https_disabled);
+    RUN_TEST(test_http_port_available);
     
     UNITY_END();
 }
