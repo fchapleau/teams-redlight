@@ -9,15 +9,7 @@
       "chipFamily": "ESP32",
       "parts": [
         { 
-          "path": "firmware/bootloader.bin", 
-          "offset": 4096 
-        },
-        { 
-          "path": "firmware/partitions.bin", 
-          "offset": 32768 
-        },
-        { 
-          "path": "firmware/firmware.bin", 
+          "path": "firmware/teams-redlight-firmware.bin", 
           "offset": 65536 
         }
       ]
