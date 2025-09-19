@@ -69,11 +69,12 @@ ESP32 Development Board
 
 1. **Power on the ESP32** - The LED will blink very fast indicating configuration mode
 2. **Connect to WiFi network** named "Teams Red Light" (password: "configure")
-3. **Open browser** and go to http://192.168.4.1
+3. **Open browser** and go to http://192.168.4.1 (or https://192.168.4.1 for secure access)
 4. **Configure your settings:**
    - WiFi network credentials
    - Microsoft Teams/Office 365 settings
    - Azure AD application credentials
+   - Security settings (enable HTTPS if desired)
 
 ### 4. Microsoft Azure AD Setup
 
@@ -225,14 +226,30 @@ pio test
 
 ## Security Considerations
 
-- **Client secrets** are stored in ESP32 flash memory
+- **Client secrets** are stored securely in ESP32 flash memory
 - **Access tokens** are refreshed automatically
 - **Network traffic** uses HTTPS for Microsoft Graph API
-- **Local web interface** uses HTTP (suitable for local network only)
+- **Local web interface** supports both HTTP and HTTPS
+- **HTTPS support** with self-signed certificates for secure local access
+
+### HTTPS Configuration
+
+The device now supports HTTPS alongside the standard HTTP interface:
+
+- **HTTP**: Port 80 (default, always available)
+- **HTTPS**: Port 443 (optional, configurable)
+- **Self-signed certificates**: Automatically generated and stored in flash
+- **Security**: HTTPS protects configuration data in transit on your local network
+
+To enable HTTPS:
+1. Access the configuration page
+2. Check "Enable HTTPS (Port 443)" in Security Settings
+3. Save configuration and restart the device
+4. Access via `https://[device-ip]` (you may need to accept the self-signed certificate)
 
 For production use, consider:
 - Using certificate-based authentication instead of client secrets
-- Implementing HTTPS for the local web interface
+- Installing proper SSL certificates from a trusted CA
 - Regular firmware updates for security patches
 
 ## License

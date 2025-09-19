@@ -3,7 +3,6 @@
 #include <WebServer.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
-#include <WiFiServer.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <Update.h>
@@ -54,6 +53,9 @@ void setupWebServer();
 void setupHTTPS();
 void handleHTTPSClient();
 void generateSelfSignedCert();
+String generateRootPage();
+String generateConfigPage();
+String generateStatusResponse();
 #endif
 void handleRoot();
 void handleConfig();
@@ -539,6 +541,19 @@ void handleConfig() {
                 </div>
             </div>
             
+#if ENABLE_HTTPS
+            <div class="section">
+                <h3>Security Settings</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="enable_https" name="enable_https")" + String(httpsEnabled ? " checked" : "") + R"(>
+                        Enable HTTPS (Port 443)
+                    </label>
+                    <div class="help">Enable secure HTTPS access with self-signed certificate</div>
+                </div>
+            </div>
+#endif
+            
             <button type="submit">Save Configuration</button>
             <button type="button" onclick="window.location.href='/'">Back to Home</button>
         </form>
@@ -638,6 +653,27 @@ void handleSave() {
     }
   }
   
+#if ENABLE_HTTPS
+  // Save HTTPS configuration
+  if (server.hasArg("enable_https")) {
+    bool newHttpsEnabled = server.arg("enable_https") == "on";
+    if (newHttpsEnabled != httpsEnabled) {
+      LOG_INFOF("HTTPS enabled changed to: %s", newHttpsEnabled ? "true" : "false");
+      httpsEnabled = newHttpsEnabled;
+      preferences.putBool(KEY_SSL_ENABLED, httpsEnabled);
+      configChanged = true;
+    }
+  } else {
+    // Checkbox not checked means disabled
+    if (httpsEnabled) {
+      LOG_INFO("HTTPS disabled");
+      httpsEnabled = false;
+      preferences.putBool(KEY_SSL_ENABLED, httpsEnabled);
+      configChanged = true;
+    }
+  }
+#endif
+  
   if (configChanged) {
     LOG_INFO("Configuration changes saved to flash memory");
   } else {
@@ -727,6 +763,13 @@ void handleStatus() {
   }
   doc["has_token"] = accessToken.length() > 0;
   doc["uptime"] = millis() / 1000;
+  
+#if ENABLE_HTTPS
+  doc["https_enabled"] = httpsEnabled;
+  doc["https_available"] = true;
+#else
+  doc["https_available"] = false;
+#endif
   
   String response;
   serializeJson(doc, response);
@@ -1197,37 +1240,146 @@ void handleHTTPSClient() {
   if (client) {
     LOG_DEBUG("HTTPS client connected");
     
-    // Read the request
+    // Read the request line by line
     String request = "";
-    while (client.connected() && client.available()) {
-      String line = client.readStringUntil('\r');
-      request += line;
-      if (line == "\n") break;
+    String method = "";
+    String path = "";
+    String line = "";
+    
+    // Read request line
+    if (client.available()) {
+      line = client.readStringUntil('\n');
+      line.trim();
+      
+      // Parse HTTP method and path
+      int firstSpace = line.indexOf(' ');
+      int secondSpace = line.indexOf(' ', firstSpace + 1);
+      
+      if (firstSpace > 0 && secondSpace > firstSpace) {
+        method = line.substring(0, firstSpace);
+        path = line.substring(firstSpace + 1, secondSpace);
+      }
     }
     
-    LOG_DEBUGF("HTTPS request: %s", request.c_str());
+    // Read remaining headers (skip for simplicity)
+    while (client.available()) {
+      line = client.readStringUntil('\n');
+      line.trim();
+      if (line.length() == 0) break; // Empty line indicates end of headers
+    }
     
-    // Basic HTTPS response (simplified for now)
-    // In a full implementation, you would parse the request and route to handlers
-    String response = "HTTP/1.1 200 OK\r\n";
-    response += "Content-Type: text/html\r\n";
-    response += "Connection: close\r\n\r\n";
-    response += "<!DOCTYPE html><html><head><title>Teams Red Light - HTTPS</title></head>";
-    response += "<body><h1>🔴 Teams Red Light - HTTPS Enabled</h1>";
-    response += "<p>This is the secure HTTPS interface.</p>";
-    response += "<p><a href=\"http://";
-    if (currentState == STATE_AP_MODE) {
-      response += "192.168.4.1";
+    LOG_DEBUGF("HTTPS %s request to: %s", method.c_str(), path.c_str());
+    
+    // Route the request
+    String response = "";
+    String contentType = "text/html";
+    
+    if (path == "/" || path == "/index.html") {
+      response = generateRootPage();
+    } else if (path == "/config") {
+      response = generateConfigPage();
+    } else if (path == "/status") {
+      response = generateStatusResponse();
+      contentType = "application/json";
     } else {
-      response += WiFi.localIP().toString();
+      // 404 Not Found
+      response = "<!DOCTYPE html><html><head><title>404 Not Found</title></head>";
+      response += "<body><h1>404 - Page Not Found</h1>";
+      response += "<p>The requested page was not found on this HTTPS server.</p>";
+      response += "<p><a href=\"/\">Return to home</a></p></body></html>";
     }
-    response += "\">Switch to HTTP interface</a></p>";
-    response += "</body></html>";
     
-    client.print(response);
+    // Send HTTP response
+    String httpResponse = "HTTP/1.1 200 OK\r\n";
+    httpResponse += "Content-Type: " + contentType + "\r\n";
+    httpResponse += "Content-Length: " + String(response.length()) + "\r\n";
+    httpResponse += "Connection: close\r\n";
+    httpResponse += "Server: Teams-Red-Light-HTTPS/1.0\r\n\r\n";
+    httpResponse += response;
+    
+    client.print(httpResponse);
     client.stop();
     
     LOG_DEBUG("HTTPS client disconnected");
   }
+}
+
+String generateRootPage() {
+  String html = "<!DOCTYPE html>";
+  html += "<html>";
+  html += "<head>";
+  html += "<title>Teams Red Light - HTTPS</title>";
+  html += "<meta charset=\"UTF-8\">";
+  html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+  html += "<style>";
+  html += "body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }";
+  html += ".container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }";
+  html += "h1 { color: #d73502; text-align: center; }";
+  html += ".https-badge { background-color: #28a745; color: white; padding: 5px 10px; border-radius: 3px; font-size: 12px; margin-left: 10px; }";
+  html += ".status { padding: 15px; margin: 10px 0; border-radius: 5px; text-align: center; font-weight: bold; }";
+  html += ".status.connected { background-color: #d4edda; color: #155724; }";
+  html += ".status.disconnected { background-color: #f8d7da; color: #721c24; }";
+  html += ".status.configuring { background-color: #fff3cd; color: #856404; }";
+  html += "button { background-color: #d73502; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }";
+  html += "button:hover { background-color: #b12d02; }";
+  html += "</style>";
+  html += "</head>";
+  html += "<body>";
+  html += "<div class=\"container\">";
+  html += "<h1>🔴 Teams Red Light<span class=\"https-badge\">🔒 HTTPS</span></h1>";
+  html += "<div class=\"status configuring\">Secure connection established</div>";
+  html += "<h3>Configuration</h3>";
+  html += "<button onclick=\"window.location.href='/config'\">Configure Device</button>";
+  html += "<button onclick=\"window.location.href='/status'\">Check Status</button>";
+  html += "<button onclick=\"window.location.href='http://";
+  if (currentState == STATE_AP_MODE) {
+    html += "192.168.4.1";
+  } else {
+    html += WiFi.localIP().toString();
+  }
+  html += "'\">Switch to HTTP</button>";
+  html += "</div>";
+  html += "</body></html>";
+  
+  return html;
+}
+
+String generateConfigPage() {
+  String html = "<!DOCTYPE html>";
+  html += "<html>";
+  html += "<head>";
+  html += "<title>Teams Red Light - Configuration (HTTPS)</title>";
+  html += "<meta charset=\"UTF-8\">";
+  html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+  html += "</head>";
+  html += "<body>";
+  html += "<h1>🔴 Teams Red Light - Secure Configuration</h1>";
+  html += "<p>This is the secure HTTPS configuration interface.</p>";
+  html += "<p>For full configuration features, please use the HTTP interface.</p>";
+  html += "<p><a href=\"http://";
+  if (currentState == STATE_AP_MODE) {
+    html += "192.168.4.1/config";
+  } else {
+    html += WiFi.localIP().toString() + "/config";
+  }
+  html += "\">Go to HTTP Configuration</a></p>";
+  html += "</body></html>";
+  
+  return html;
+}
+
+String generateStatusResponse() {
+  String json = "{";
+  json += "\"status\":\"success\",";
+  json += "\"https\":true,";
+  json += "\"state\":\"" + String(currentState) + "\",";
+  json += "\"presence\":\"" + String(currentPresence) + "\",";
+  json += "\"wifi_connected\":" + String(WiFi.status() == WL_CONNECTED ? "true" : "false") + ",";
+  json += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
+  json += "\"uptime\":" + String(millis()) + ",";
+  json += "\"free_heap\":" + String(ESP.getFreeHeap());
+  json += "}";
+  
+  return json;
 }
 #endif
