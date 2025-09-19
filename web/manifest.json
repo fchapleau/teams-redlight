@@ -1,6 +1,6 @@
 {
   "name": "Teams Red Light",
-  "version": "1.0.6",
+  "version": "1.0.8",
   "home_assistant_domain": "teams_red_light",
   "funding_url": "https://github.com/fchapleau/teams-redlight",
   "new_install_skip_erase": false,

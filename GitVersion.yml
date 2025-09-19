@@ -1,0 +1,53 @@
+mode: Mainline
+branches:
+  main:
+    regex: ^main$
+    mode: ContinuousDelivery
+    increment: Patch
+    prevent-increment-of-merged-branch-version: true
+    track-merge-target: false
+    source-branches: ['develop', 'hotfix']
+  develop:
+    regex: ^dev(elop)?(ment)?$
+    mode: ContinuousDeployment
+    increment: Minor
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: true
+  release:
+    regex: ^releases?[/-]v?(?<version>.+)$
+    mode: ContinuousDelivery
+    increment: None
+    prevent-increment-of-merged-branch-version: true
+    track-merge-target: false
+    source-branches: ['develop', 'main', 'support', 'release']
+  feature:
+    regex: ^features?[/-](?<BranchName>.+)$
+    mode: ContinuousDeployment
+    increment: Inherit
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: false
+    source-branches: ['develop', 'main', 'release', 'feature', 'support', 'hotfix']
+  pull-request:
+    regex: ^(pull|pull\-requests|pr)[/-]
+    mode: ContinuousDeployment
+    increment: Inherit
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: false
+    source-branches: ['develop', 'main', 'release', 'feature', 'support', 'hotfix']
+  hotfix:
+    regex: ^hotfix(es)?[/-](?<BranchName>.+)$
+    mode: ContinuousDeployment
+    increment: Patch
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: false
+    source-branches: ['develop', 'main', 'support']
+  support:
+    regex: ^support[/-](?<BranchName>.+)$
+    mode: ContinuousDelivery
+    increment: Patch
+    prevent-increment-of-merged-branch-version: true
+    track-merge-target: false
+    source-branches: ['main']
+ignore:
+  sha: []
+merge-message-formats: {}

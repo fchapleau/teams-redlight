@@ -99,20 +99,20 @@ Both approaches are fully compliant with the [ESP Web Tools specification](https
 
 - Added guidance about boot failures in the web flasher
 - Provided specific troubleshooting steps for "invalid header" errors
-- Updated firmware version to 1.0.6
+- Updated firmware version to 1.0.8
 
 ## For Users Experiencing This Issue
 
 ### If you're currently experiencing boot failures:
 
-1. **Flash again with the latest firmware** (v1.0.6+) from https://fchapleau.github.io/teams-redlight/
+1. **Flash again with the latest firmware** (v1.0.8+) from https://fchapleau.github.io/teams-redlight/
 2. The new firmware includes all required ESP32 components
 3. If still failing, try holding the BOOT button during the entire flash process
 4. Ensure you're using a USB cable that supports data transfer (not just charging)
 
 ### Prevention
 
-The latest firmware (v1.0.6+) automatically includes all required components, so this issue should not occur with new installations.
+The latest firmware (v1.0.8+) automatically includes all required components, so this issue should not occur with new installations.
 
 ## Technical Details
 

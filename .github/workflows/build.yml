@@ -10,8 +10,26 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.gitversion.outputs.semVer }}
+      informationalVersion: ${{ steps.gitversion.outputs.informationalVersion }}
+      fullVersion: ${{ steps.gitversion.outputs.fullSemVer }}
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v0.10.2
+      with:
+        versionSpec: '5.x'
+    
+    - name: Determine Version
+      id: gitversion
+      uses: gittools/actions/gitversion/execute@v0.10.2
+      with:
+        useConfigFile: true
+        configFilePath: GitVersion.yml
     
     - name: Validate Project Structure
       run: |
@@ -107,6 +125,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Update manifest.json with GitVersion
+      run: |
+        echo "Updating manifest.json with version: ${{ needs.validate.outputs.informationalVersion }}"
+        
+        # Update the version in manifest.json with the GitVersion calculated version
+        sed -i 's/"version": ".*"/"version": "${{ needs.validate.outputs.informationalVersion }}"/' web/manifest.json
+        
+        # Verify the update
+        echo "Updated manifest.json version:"
+        grep '"version"' web/manifest.json
+    
     - name: Cache pip
       uses: actions/cache@v4
       with:
@@ -159,6 +188,9 @@ jobs:
         
         # Create version info
         echo "Build Date: $(date)" > release/build-info.txt
+        echo "Version: ${{ needs.validate.outputs.informationalVersion }}" >> release/build-info.txt
+        echo "SemVer: ${{ needs.validate.outputs.version }}" >> release/build-info.txt
+        echo "Full Version: ${{ needs.validate.outputs.fullVersion }}" >> release/build-info.txt
         echo "Commit: ${{ github.sha }}" >> release/build-info.txt
         echo "Branch: ${{ github.ref_name }}" >> release/build-info.txt
         echo "PlatformIO Accessible: ${PLATFORMIO_ACCESSIBLE:-unknown}" >> release/build-info.txt
@@ -173,7 +205,7 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: firmware-build
+        name: firmware-build-${{ needs.validate.outputs.version }}
         path: release/
         retention-days: 30
 
@@ -199,7 +231,7 @@ jobs:
     - name: Download firmware artifacts
       uses: actions/download-artifact@v4
       with:
-        name: firmware-build
+        name: firmware-build-${{ needs.validate.outputs.version }}
         path: firmware/
       continue-on-error: true
     
@@ -268,11 +300,17 @@ jobs:
         # Create a clean directory structure for Pages
         mkdir -p _site
         
+        # Update the web manifest with GitVersion before copying
+        echo "Updating manifest.json with GitVersion: ${{ needs.validate.outputs.informationalVersion }}"
+        sed -i 's/"version": ".*"/"version": "${{ needs.validate.outputs.informationalVersion }}"/' web/manifest.json
+        
         # Copy the web flasher to be the default page
         cp web/index.html _site/index.html
         
         # Copy manifest.json for ESP Web Tools
         cp web/manifest.json _site/manifest.json
+        
+        echo "✅ Updated manifest.json version: $(grep '"version"' _site/manifest.json)"
         
         # Copy firmware binaries to serve from same origin (to avoid CORS)
         if [ -d "firmware" ]; then
