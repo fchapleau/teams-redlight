@@ -182,7 +182,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, build-firmware]
     # Only deploy to GitHub Pages from main branch, tags, or releases
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       pages: write
@@ -355,79 +355,3 @@ jobs:
     - name: Deploy to GitHub Pages
       id: deployment
       uses: actions/deploy-pages@v4
-        
-  # Release creation job
-  create-release:
-    runs-on: ubuntu-latest
-    needs: [validate, build-firmware]
-    if: github.event_name == 'release'
-    permissions:
-      contents: write
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: firmware-build
-        path: release/
-      continue-on-error: true
-    
-    - name: Prepare release files
-      run: |
-        # Show what files will be released
-        echo "Files available for release:"
-        ls -la release/ || echo "No release directory found"
-        
-        if [ -f "release/teams-redlight-firmware.bin" ]; then
-          echo "✅ teams-redlight-firmware.bin"
-        else
-          echo "⚠️  teams-redlight-firmware.bin (missing - will not be included)"
-        fi
-        if [ -f "release/teams-redlight-firmware-debug.bin" ]; then
-          echo "✅ teams-redlight-firmware-debug.bin"
-        else
-          echo "⚠️  teams-redlight-firmware-debug.bin (missing - will not be included)"
-        fi
-        if [ -f "release/build-info.txt" ]; then
-          echo "✅ build-info.txt"
-        else
-          echo "⚠️  build-info.txt (missing - will not be included)"
-        fi
-    
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: release/*
-        body: |
-          ## 🔴 Teams Red Light Firmware Release
-          
-          ### Features
-          - ESP32 firmware for Teams presence monitoring
-          - Web-based configuration interface  
-          - Microsoft Graph API integration
-          - OTA firmware updates
-          - Persistent configuration storage
-          
-          ### Quick Start
-          1. Use the [**Web Flasher**](https://fchapleau.github.io/teams-redlight/) to flash your ESP32
-          2. Connect LED with 220Ω resistor to GPIO 2
-          3. Connect to "Teams Red Light" WiFi network (password: "configure")
-          4. Configure at http://192.168.4.1
-          5. Authenticate with Microsoft Teams
-          
-          ### Hardware Requirements
-          - ESP32 development board
-          - Red LED (3mm or 5mm)
-          - 220Ω resistor
-          - Jumper wires
-          
-          ### Files
-          - `teams-redlight-firmware.bin` - Production firmware
-          - `teams-redlight-firmware-debug.bin` - Debug firmware with verbose logging
-          - `build-info.txt` - Build information and version details
-          
-          Built from commit: ${{ github.sha }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
