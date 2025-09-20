@@ -518,296 +518,122 @@ void handleRoot() {
 }
 
 void handleConfig() {
-  String html = R"(<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teams Red Light - Configuration</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 1rem;
-        }
-        
-        .container {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 700px;
-            margin: 0 auto;
-            overflow: hidden;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, #d73502, #b12d02);
-            color: white;
-            padding: 2rem;
-            text-align: center;
-        }
-        
-        .header h1 {
-            font-size: 1.8rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-        
-        .content {
-            padding: 2rem;
-        }
-        
-        .section {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            border-left: 4px solid #d73502;
-        }
-        
-        .section h3 {
-            color: #d73502;
-            margin-bottom: 1rem;
-            font-size: 1.2rem;
-        }
-        
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        
-        .form-group:last-child {
-            margin-bottom: 0;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-            color: #333;
-        }
-        
-        input[type="text"],
-        input[type="password"],
-        input[type="email"] {
-            width: 100%;
-            padding: 0.75rem;
-            border: 2px solid #e9ecef;
-            border-radius: 6px;
-            font-size: 1rem;
-            transition: border-color 0.2s ease;
-        }
-        
-        input[type="text"]:focus,
-        input[type="password"]:focus,
-        input[type="email"]:focus {
-            outline: none;
-            border-color: #d73502;
-        }
-        
-        .help {
-            font-size: 0.875rem;
-            color: #6c757d;
-            margin-top: 0.25rem;
-        }
-        
-        .actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-top: 2rem;
-        }
-        
-        .btn {
-            background: #d73502;
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 6px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-            text-align: center;
-            display: inline-block;
-        }
-        
-        .btn:hover {
-            background: #b12d02;
-            transform: translateY(-1px);
-        }
-        
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            background: #5a6268;
-        }
-        
-        .btn-auth {
-            background: #0078d4;
-            margin-top: 1rem;
-            width: 100%;
-        }
-        
-        .btn-auth:hover {
-            background: #106ebe;
-        }
-        
-        .info-box {
-            background: #e8f4fd;
-            border: 1px solid #bee5eb;
-            border-radius: 6px;
-            padding: 1rem;
-            margin-top: 1rem;
-        }
-        
-        .info-box h4 {
-            color: #0c5460;
-            margin-bottom: 0.5rem;
-        }
-        
-        .info-box ol {
-            margin-left: 1.5rem;
-            color: #0c5460;
-        }
-        
-        .info-box li {
-            margin-bottom: 0.5rem;
-        }
-        
-        .success-banner {
-            background: #d1f2eb;
-            border: 1px solid #a7f3d0;
-            border-radius: 6px;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            color: #065f46;
-        }
-        
-        @media (max-width: 768px) {
-            body {
-                padding: 0.5rem;
-            }
-            
-            .header {
-                padding: 1.5rem;
-            }
-            
-            .content {
-                padding: 1.5rem;
-            }
-            
-            .actions {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>⚙️ Device Configuration</h1>
-            <p>Configure your Teams Red Light device</p>
-        </div>
-        
-        <div class="content">
-            <form action="/save" method="POST">
-                <div class="section">
-                    <h3>📶 WiFi Connection</h3>
-                    <div class="form-group">
-                        <label for="wifi_ssid">Network Name (SSID)</label>
-                        <input type="text" id="wifi_ssid" name="wifi_ssid" value=")" + wifiSSID + R"(" required placeholder="Enter your WiFi network name">
-                    </div>
-                    <div class="form-group">
-                        <label for="wifi_password">WiFi Password</label>
-                        <input type="password" id="wifi_password" name="wifi_password" value="" placeholder="Enter WiFi password">
-                        <div class="help">💡 Leave blank to keep current password</div>
-                    </div>
-                </div>
-                
-                <div class="section">
-                    <h3>🔐 Microsoft Teams Integration</h3>
-                    <div class="form-group">
-                        <label for="user_email">Your Email Address</label>
-                        <input type="email" id="user_email" name="user_email" value=")" + userEmail + R"(" required placeholder="your.name@company.com">
-                        <div class="help">📧 The email address for your Teams account</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="tenant_id">Tenant ID (Optional)</label>
-                        <input type="text" id="tenant_id" name="tenant_id" value=")" + tenantId + R"(" placeholder="common">
-                        <div class="help">🏢 Your Office 365 tenant ID (use 'common' for personal accounts)</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="client_id">Application Client ID</label>
-                        <input type="text" id="client_id" name="client_id" value=")" + clientId + R"(" required placeholder="12345678-1234-1234-1234-123456789012">
-                        <div class="help">🆔 Azure AD Application Client ID</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="client_secret">Application Client Secret</label>
-                        <input type="password" id="client_secret" name="client_secret" value="" placeholder="Enter client secret">
-                        <div class="help">🔑 Azure AD Application Client Secret (leave blank to keep current)</div>
-                    </div>
-                </div>
-                
-                <div class="section">
-                    <h3>🔄 Firmware Updates</h3>
-                    <div class="form-group">
-                        <label for="ota_url">Update URL</label>
-                        <input type="text" id="ota_url" name="ota_url" value=")" + preferences.getString(OTA_UPDATE_URL_KEY, DEFAULT_OTA_URL) + R"(" placeholder="https://github.com/...">
-                        <div class="help">🌐 URL for over-the-air firmware updates</div>
-                    </div>
-                </div>
-                
-                <div class="actions">
-                    <button type="submit" class="btn">💾 Save Configuration</button>
-                    <button type="button" class="btn btn-secondary" onclick="window.location.href='/'">← Back to Home</button>
-                </div>
-            </form>
-            
-            <div class="section">
-                <h3>🔐 Microsoft Authentication</h3>
-                <p>After saving your configuration, authenticate with Microsoft to enable Teams presence monitoring.</p>
-                <button type="button" class="btn btn-auth" onclick="window.location.href='/login'">
-                    🚀 Authenticate with Microsoft
-                </button>
-                
-                <div class="info-box">
-                    <h4>✅ Secure Device Code Flow</h4>
-                    <p>This device uses Microsoft's secure Device Code Flow - no redirect URLs or SSL certificates needed!</p>
-                </div>
-            </div>
-            
-            <div class="section">
-                <h3>📋 Setup Guide</h3>
-                <div class="info-box">
-                    <h4>Azure AD Application Setup:</h4>
-                    <ol>
-                        <li>Go to <strong>Azure Portal</strong> → Azure Active Directory → App registrations</li>
-                        <li>Click <strong>"New registration"</strong></li>
-                        <li>Enter name: <strong>"Teams Red Light"</strong></li>
-                        <li>Leave redirect URI <strong>blank</strong> (not needed!)</li>
-                        <li>Add API permission: <strong>Microsoft Graph → Presence.Read</strong></li>
-                        <li>Create a <strong>client secret</strong></li>
-                        <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> above</li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-    </div>
-</body>
-</html>)";
+  String html = "<!DOCTYPE html>";
+  html += "<html lang=\"en\">";
+  html += "<head>";
+  html += "<meta charset=\"UTF-8\">";
+  html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+  html += "<title>Teams Red Light - Configuration</title>";
+  html += "<style>";
+  html += "* { margin: 0; padding: 0; box-sizing: border-box; }";
+  html += "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 1rem; }";
+  html += ".container { background: white; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); width: 100%; max-width: 700px; margin: 0 auto; overflow: hidden; }";
+  html += ".header { background: linear-gradient(135deg, #d73502, #b12d02); color: white; padding: 2rem; text-align: center; }";
+  html += ".header h1 { font-size: 1.8rem; font-weight: 600; margin-bottom: 0.5rem; }";
+  html += ".content { padding: 2rem; }";
+  html += ".section { background: #f8f9fa; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; border-left: 4px solid #d73502; }";
+  html += ".section h3 { color: #d73502; margin-bottom: 1rem; font-size: 1.2rem; }";
+  html += ".form-group { margin-bottom: 1rem; }";
+  html += "label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333; }";
+  html += "input[type=\"text\"], input[type=\"password\"], input[type=\"email\"] { width: 100%; padding: 0.75rem; border: 2px solid #e9ecef; border-radius: 6px; font-size: 1rem; transition: border-color 0.2s ease; }";
+  html += "input:focus { outline: none; border-color: #d73502; }";
+  html += ".help { font-size: 0.875rem; color: #6c757d; margin-top: 0.25rem; }";
+  html += ".actions { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 2rem; }";
+  html += ".btn { background: #d73502; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; font-size: 1rem; cursor: pointer; transition: all 0.2s ease; text-decoration: none; text-align: center; display: inline-block; }";
+  html += ".btn:hover { background: #b12d02; transform: translateY(-1px); }";
+  html += ".btn-secondary { background: #6c757d; color: white; } .btn-secondary:hover { background: #5a6268; }";
+  html += ".btn-auth { background: #0078d4; margin-top: 1rem; width: 100%; } .btn-auth:hover { background: #106ebe; }";
+  html += ".info-box { background: #e8f4fd; border: 1px solid #bee5eb; border-radius: 6px; padding: 1rem; margin-top: 1rem; }";
+  html += ".info-box h4 { color: #0c5460; margin-bottom: 0.5rem; }";
+  html += ".info-box ol { margin-left: 1.5rem; color: #0c5460; }";
+  html += ".info-box li { margin-bottom: 0.5rem; }";
+  html += "@media (max-width: 768px) { body { padding: 0.5rem; } .header { padding: 1.5rem; } .content { padding: 1.5rem; } .actions { grid-template-columns: 1fr; } }";
+  html += "</style>";
+  html += "</head>";
+  html += "<body>";
+  html += "<div class=\"container\">";
+  html += "<div class=\"header\">";
+  html += "<h1>&#x2699;&#xFE0F; Device Configuration</h1>";
+  html += "<p>Configure your Teams Red Light device</p>";
+  html += "</div>";
+  html += "<div class=\"content\">";
+  html += "<form action=\"/save\" method=\"POST\">";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F4F6; WiFi Connection</h3>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"wifi_ssid\">Network Name (SSID)</label>";
+  html += "<input type=\"text\" id=\"wifi_ssid\" name=\"wifi_ssid\" value=\"" + wifiSSID + "\" required placeholder=\"Enter your WiFi network name\">";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"wifi_password\">WiFi Password</label>";
+  html += "<input type=\"password\" id=\"wifi_password\" name=\"wifi_password\" value=\"\" placeholder=\"Enter WiFi password\">";
+  html += "<div class=\"help\">&#x1F4A1; Leave blank to keep current password</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F510; Microsoft Teams Integration</h3>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"user_email\">Your Email Address</label>";
+  html += "<input type=\"email\" id=\"user_email\" name=\"user_email\" value=\"" + userEmail + "\" required placeholder=\"your.name@company.com\">";
+  html += "<div class=\"help\">&#x1F4E7; The email address for your Teams account</div>";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"tenant_id\">Tenant ID (Optional)</label>";
+  html += "<input type=\"text\" id=\"tenant_id\" name=\"tenant_id\" value=\"" + tenantId + "\" placeholder=\"common\">";
+  html += "<div class=\"help\">&#x1F3E2; Your Office 365 tenant ID (use 'common' for personal accounts)</div>";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"client_id\">Application Client ID</label>";
+  html += "<input type=\"text\" id=\"client_id\" name=\"client_id\" value=\"" + clientId + "\" required placeholder=\"12345678-1234-1234-1234-123456789012\">";
+  html += "<div class=\"help\">&#x1F194; Azure AD Application Client ID</div>";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"client_secret\">Application Client Secret</label>";
+  html += "<input type=\"password\" id=\"client_secret\" name=\"client_secret\" value=\"\" placeholder=\"Enter client secret\">";
+  html += "<div class=\"help\">&#x1F511; Azure AD Application Client Secret (leave blank to keep current)</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F504; Firmware Updates</h3>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"ota_url\">Update URL</label>";
+  html += "<input type=\"text\" id=\"ota_url\" name=\"ota_url\" value=\"" + preferences.getString(OTA_UPDATE_URL_KEY, DEFAULT_OTA_URL) + "\" placeholder=\"https://github.com/...\">";
+  html += "<div class=\"help\">&#x1F310; URL for over-the-air firmware updates</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "<div class=\"actions\">";
+  html += "<button type=\"submit\" class=\"btn\">&#x1F4BE; Save Configuration</button>";
+  html += "<button type=\"button\" class=\"btn btn-secondary\" onclick=\"window.location.href='/'\">&#x2190; Back to Home</button>";
+  html += "</div>";
+  html += "</form>";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F510; Microsoft Authentication</h3>";
+  html += "<p>After saving your configuration, authenticate with Microsoft to enable Teams presence monitoring.</p>";
+  html += "<button type=\"button\" class=\"btn btn-auth\" onclick=\"window.location.href='/login'\">&#x1F680; Authenticate with Microsoft</button>";
+  html += "<div class=\"info-box\">";
+  html += "<h4>&#x2705; Secure Device Code Flow</h4>";
+  html += "<p>This device uses Microsoft's secure Device Code Flow - no redirect URLs or SSL certificates needed!</p>";
+  html += "</div>";
+  html += "</div>";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F4CB; Setup Guide</h3>";
+  html += "<div class=\"info-box\">";
+  html += "<h4>Azure AD Application Setup:</h4>";
+  html += "<ol>";
+  html += "<li>Go to <strong>Azure Portal</strong> &#x2192; Azure Active Directory &#x2192; App registrations</li>";
+  html += "<li>Click <strong>\"New registration\"</strong></li>";
+  html += "<li>Enter name: <strong>\"Teams Red Light\"</strong></li>";
+  html += "<li>Leave redirect URI <strong>blank</strong> (not needed!)</li>";
+  html += "<li>Add API permission: <strong>Microsoft Graph &#x2192; Presence.Read</strong></li>";
+  html += "<li>Create a <strong>client secret</strong></li>";
+  html += "<li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> above</li>";
+  html += "</ol>";
+  html += "</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "</body>";
+  html += "</html>";
   
   server.send(200, "text/html", html);
 }
