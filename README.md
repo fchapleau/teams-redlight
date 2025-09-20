@@ -10,12 +10,11 @@ An ESP32-based device that shows your Microsoft Teams presence status with a red
 - **Persistent storage** - remembers settings after power cycles
 - **OTA firmware updates** - update wirelessly
 - **Web-based flashing** - flash ESP32 directly from your browser
-- **Multiple LED patterns**:
-  - Very fast blink: Configuration mode (AP mode)
-  - Slow blink: Connecting to WiFi
-  - Fast blink: Connecting to Microsoft Graph
-  - Solid red: In meeting or busy
-  - Off: Available or away
+- **Customizable LED patterns**:
+  - **System patterns**: Very fast blink (AP mode), slow blink (WiFi), fast blink (API)
+  - **Meeting patterns**: 7 selectable patterns for when in meetings or busy
+  - **Available patterns**: 7 selectable patterns for when available (optional)
+  - **Pattern types**: Off, Solid, Slow/Medium/Fast blink, Double blink, Dim solid
 
 ## Quick Start
 
@@ -74,6 +73,7 @@ ESP32 Development Board
    - WiFi network credentials
    - Microsoft Teams/Office 365 settings
    - Azure AD application credentials
+   - LED pattern preferences (optional)
 
 ### 4. Microsoft Azure AD Setup
 
@@ -110,6 +110,7 @@ The device provides a comprehensive web interface for configuration:
 
 - **WiFi Settings**: Configure network connection
 - **Teams Settings**: Set up Microsoft Graph API access
+- **LED Pattern Settings**: Customize LED behavior for different states
 - **Device Status**: Monitor connection and presence status
 - **Firmware Updates**: Update device firmware remotely
 
@@ -123,19 +124,44 @@ The device provides a comprehensive web interface for configuration:
 | Client ID | Azure AD Application ID | Yes |
 | Client Secret | Azure AD Application Secret | Yes |
 | Tenant ID | Azure AD Tenant ID (can be "common") | No |
+| Meeting LED Pattern | LED behavior during meetings/busy | No |
+| Available LED Pattern | LED behavior when available | No |
 | OTA URL | Firmware update URL | No |
 
 ## LED Status Indicators
+
+### System Status Patterns (Fixed)
 
 | Pattern | Meaning |
 |---------|---------|
 | Very fast blink (100ms) | Configuration mode - connect to "Teams Red Light" WiFi |
 | Slow blink (1000ms) | Connecting to WiFi network |
 | Fast blink (200ms) | Connecting to Microsoft Graph API |
-| Solid red | In meeting or busy status |
-| Off | Available, away, or offline |
 
-> **Note:** Both the external LED (on GPIO 2) and the ESP32's onboard LED will show the same status patterns simultaneously.
+### Teams Presence Patterns (Configurable)
+
+**Meeting/Busy Status** - Choose from these patterns when in a meeting or busy:
+- **Solid** (default) - LED stays on continuously
+- **Slow Blink (1s)** - LED blinks every second
+- **Medium Blink (0.5s)** - LED blinks twice per second
+- **Fast Blink (0.2s)** - LED blinks 5 times per second
+- **Double Blink** - Two quick blinks followed by a pause
+- **Dim Solid** - LED stays on at reduced brightness
+- **Off** - LED turns off
+
+**Available Status** - Choose from these patterns when available/away/offline:
+- **Off** (default) - LED turns off
+- **Solid** - LED stays on continuously
+- **Slow Blink (1s)** - LED blinks every second
+- **Medium Blink (0.5s)** - LED blinks twice per second
+- **Fast Blink (0.2s)** - LED blinks 5 times per second
+- **Double Blink** - Two quick blinks followed by a pause
+- **Dim Solid** - LED stays on at reduced brightness
+
+> **Note:** 
+> - Both the external LED (on GPIO 2) and the ESP32's onboard LED will show the same status patterns simultaneously
+> - LED patterns for Teams presence can be customized in the web configuration interface
+> - System status patterns (configuration, WiFi, API connection) cannot be changed
 
 ## Troubleshooting
 

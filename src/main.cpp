@@ -22,6 +22,20 @@ bool ledState = false;
 unsigned long lastPresenceCheck = 0;
 unsigned long tokenExpires = 0;
 
+// LED Pattern state
+LEDPattern callPattern = DEFAULT_CALL_PATTERN;
+LEDPattern meetingPattern = DEFAULT_MEETING_PATTERN;
+LEDPattern availablePattern = DEFAULT_AVAILABLE_PATTERN;
+unsigned long doubleBlinksStartTime = 0;
+bool doubleBlinksState = false;
+int doubleBlinksCount = 0;
+
+// Multiple LED configuration
+LEDConfig leds[MAX_LEDS];
+uint8_t ledCount = 0;
+const uint8_t availableGPIOPins[] = AVAILABLE_GPIO_PINS;
+const uint8_t availableGPIOCount = sizeof(availableGPIOPins) / sizeof(availableGPIOPins[0]);
+
 // Configuration variables
 String wifiSSID;
 String wifiPassword;
@@ -42,7 +56,13 @@ unsigned long lastDeviceCodePoll = 0;
 // Function declarations
 void setupLED();
 void updateLED();
-void setLEDState(int state);  // Helper function to control both LEDs
+void setLEDState(int state);  // Helper function to control both LEDs (legacy)
+void applyLEDPattern(LEDPattern pattern);  // Apply selected LED pattern (legacy)
+void setupMultipleLEDs();  // Setup multiple LEDs
+void updateMultipleLEDs(); // Update multiple LEDs
+void setLEDState(uint8_t ledIndex, int state);  // Set state for specific LED
+void applyLEDPattern(uint8_t ledIndex, LEDPattern pattern);  // Apply pattern to specific LED
+void initDefaultLEDs();  // Initialize with default LED configuration
 void setupWiFiAP();
 void setupWiFiSTA();
 void setupWebServer();
@@ -166,31 +186,267 @@ void loop() {
   delay(100);
 }
 
-void setupLED() {
-  LOG_DEBUGF("Configuring external LED on pin %d", LED_PIN);
-  pinMode(LED_PIN, OUTPUT);
+void initDefaultLEDs() {
+  // Initialize with default LED (GPIO 2) for backward compatibility
+  if (ledCount == 0) {
+    ledCount = 1;
+    leds[0].pin = LED_PIN;
+    leds[0].callPattern = DEFAULT_CALL_PATTERN;
+    leds[0].meetingPattern = DEFAULT_MEETING_PATTERN;
+    leds[0].availablePattern = DEFAULT_AVAILABLE_PATTERN;
+    leds[0].enabled = true;
+    leds[0].lastToggle = 0;
+    leds[0].state = false;
+    leds[0].doubleBlinksStartTime = 0;
+    leds[0].doubleBlinksState = false;
+    leds[0].doubleBlinksCount = 0;
+    
+    LOG_INFO("Initialized with default LED configuration (GPIO 2)");
+  }
+}
+
+void setupMultipleLEDs() {
+  LOG_INFO("Setting up multiple LED configuration");
   
-  // Setup onboard LED if it's on a different pin
-  if (LED_BUILTIN_PIN != LED_PIN) {
-    LOG_DEBUGF("Configuring onboard LED on pin %d", LED_BUILTIN_PIN);
-    pinMode(LED_BUILTIN_PIN, OUTPUT);
-    LOG_DEBUG("Both external and onboard LEDs will be synchronized");
-  } else {
-    LOG_DEBUG("Onboard LED shares the same pin as external LED");
+  // Ensure we have at least the default LED
+  initDefaultLEDs();
+  
+  // Setup each enabled LED
+  for (uint8_t i = 0; i < ledCount; i++) {
+    if (leds[i].enabled) {
+      LOG_DEBUGF("Configuring LED %d on GPIO pin %d", i, leds[i].pin);
+      pinMode(leds[i].pin, OUTPUT);
+      digitalWrite(leds[i].pin, LOW);
+    }
   }
   
-  // Initialize both LEDs to OFF state
-  setLEDState(LOW);
-  LOG_DEBUG("LED setup complete");
+  // Setup onboard LED if it's different from configured LEDs
+  bool onboardConfigured = false;
+  for (uint8_t i = 0; i < ledCount; i++) {
+    if (leds[i].enabled && leds[i].pin == LED_BUILTIN_PIN) {
+      onboardConfigured = true;
+      break;
+    }
+  }
+  
+  if (!onboardConfigured && LED_BUILTIN_PIN != LED_PIN) {
+    LOG_DEBUGF("Configuring onboard LED on pin %d", LED_BUILTIN_PIN);
+    pinMode(LED_BUILTIN_PIN, OUTPUT);
+    digitalWrite(LED_BUILTIN_PIN, LOW);
+  }
+  
+  LOG_INFOF("Multiple LED setup complete (%d LEDs configured)", ledCount);
+}
+
+void setupLED() {
+  // Legacy function - now calls the new multi-LED setup
+  setupMultipleLEDs();
+}
+
+void setLEDState(uint8_t ledIndex, int state) {
+  if (ledIndex < ledCount && leds[ledIndex].enabled) {
+    digitalWrite(leds[ledIndex].pin, state);
+    leds[ledIndex].state = (state == HIGH);
+  }
 }
 
 void setLEDState(int state) {
-  // Control external LED
-  digitalWrite(LED_PIN, state);
+  // Legacy function - control all configured LEDs
+  for (uint8_t i = 0; i < ledCount; i++) {
+    if (leds[i].enabled) {
+      setLEDState(i, state);
+    }
+  }
   
   // Control onboard LED if it's on a different pin
-  if (LED_BUILTIN_PIN != LED_PIN) {
+  bool onboardConfigured = false;
+  for (uint8_t i = 0; i < ledCount; i++) {
+    if (leds[i].enabled && leds[i].pin == LED_BUILTIN_PIN) {
+      onboardConfigured = true;
+      break;
+    }
+  }
+  
+  if (!onboardConfigured && LED_BUILTIN_PIN != LED_PIN) {
     digitalWrite(LED_BUILTIN_PIN, state);
+  }
+}
+
+void applyLEDPattern(uint8_t ledIndex, LEDPattern pattern) {
+  if (ledIndex >= ledCount || !leds[ledIndex].enabled) return;
+  
+  unsigned long currentTime = millis();
+  LEDConfig* led = &leds[ledIndex];
+  
+  switch (pattern) {
+    case PATTERN_OFF:
+      setLEDState(ledIndex, LOW);
+      break;
+      
+    case PATTERN_SOLID:
+      setLEDState(ledIndex, HIGH);
+      break;
+      
+    case PATTERN_DIM_SOLID:
+      // For simple on/off LEDs, this is the same as solid
+      // Could be enhanced for PWM in future
+      setLEDState(ledIndex, HIGH);
+      break;
+      
+    case PATTERN_SLOW_BLINK:
+      if (currentTime - led->lastToggle > LED_PATTERN_SLOW_BLINK_INTERVAL) {
+        led->state = !led->state;
+        setLEDState(ledIndex, led->state ? HIGH : LOW);
+        led->lastToggle = currentTime;
+      }
+      break;
+      
+    case PATTERN_MEDIUM_BLINK:
+      if (currentTime - led->lastToggle > LED_PATTERN_MEDIUM_BLINK_INTERVAL) {
+        led->state = !led->state;
+        setLEDState(ledIndex, led->state ? HIGH : LOW);
+        led->lastToggle = currentTime;
+      }
+      break;
+      
+    case PATTERN_FAST_BLINK:
+      if (currentTime - led->lastToggle > LED_PATTERN_FAST_BLINK_INTERVAL) {
+        led->state = !led->state;
+        setLEDState(ledIndex, led->state ? HIGH : LOW);
+        led->lastToggle = currentTime;
+      }
+      break;
+      
+    case PATTERN_DOUBLE_BLINK:
+      // Double blink pattern: on-off-on-off-pause
+      if (led->doubleBlinksStartTime == 0) {
+        led->doubleBlinksStartTime = currentTime;
+        led->doubleBlinksCount = 0;
+        led->doubleBlinksState = true;
+        setLEDState(ledIndex, HIGH);
+      } else {
+        unsigned long elapsed = currentTime - led->doubleBlinksStartTime;
+        
+        if (led->doubleBlinksCount < 4) { // 4 transitions = 2 blinks
+          if (elapsed > LED_PATTERN_DOUBLE_BLINK_ON_TIME * (led->doubleBlinksCount + 1)) {
+            led->doubleBlinksState = !led->doubleBlinksState;
+            setLEDState(ledIndex, led->doubleBlinksState ? HIGH : LOW);
+            led->doubleBlinksCount++;
+          }
+        } else if (elapsed > LED_PATTERN_DOUBLE_BLINK_INTERVAL) {
+          // Reset for next cycle
+          led->doubleBlinksStartTime = 0;
+        }
+      }
+      break;
+      
+    default:
+      setLEDState(ledIndex, LOW);
+      break;
+  }
+}
+
+void applyLEDPattern(LEDPattern pattern) {
+  // Legacy function - apply pattern to all LEDs (for backward compatibility)
+  static unsigned long lastPatternToggle = 0;
+  static bool patternState = false;
+  unsigned long currentTime = millis();
+  
+  switch (pattern) {
+    case PATTERN_OFF:
+      setLEDState(LOW);
+      break;
+      
+    case PATTERN_SOLID:
+      setLEDState(HIGH);
+      break;
+      
+    case PATTERN_DIM_SOLID:
+      // For simple on/off LEDs, this is the same as solid
+      // Could be enhanced for PWM in future
+      setLEDState(HIGH);
+      break;
+      
+    case PATTERN_SLOW_BLINK:
+      if (currentTime - lastPatternToggle > LED_PATTERN_SLOW_BLINK_INTERVAL) {
+        patternState = !patternState;
+        setLEDState(patternState ? HIGH : LOW);
+        lastPatternToggle = currentTime;
+      }
+      break;
+      
+    case PATTERN_MEDIUM_BLINK:
+      if (currentTime - lastPatternToggle > LED_PATTERN_MEDIUM_BLINK_INTERVAL) {
+        patternState = !patternState;
+        setLEDState(patternState ? HIGH : LOW);
+        lastPatternToggle = currentTime;
+      }
+      break;
+      
+    case PATTERN_FAST_BLINK:
+      if (currentTime - lastPatternToggle > LED_PATTERN_FAST_BLINK_INTERVAL) {
+        patternState = !patternState;
+        setLEDState(patternState ? HIGH : LOW);
+        lastPatternToggle = currentTime;
+      }
+      break;
+      
+    case PATTERN_DOUBLE_BLINK:
+      // Double blink pattern: on-off-on-off-pause
+      if (doubleBlinksStartTime == 0) {
+        doubleBlinksStartTime = currentTime;
+        doubleBlinksCount = 0;
+        doubleBlinksState = true;
+        setLEDState(HIGH);
+      } else {
+        unsigned long elapsed = currentTime - doubleBlinksStartTime;
+        
+        if (doubleBlinksCount < 4) { // 4 transitions = 2 blinks
+          if (elapsed > LED_PATTERN_DOUBLE_BLINK_ON_TIME * (doubleBlinksCount + 1)) {
+            doubleBlinksState = !doubleBlinksState;
+            setLEDState(doubleBlinksState ? HIGH : LOW);
+            doubleBlinksCount++;
+          }
+        } else if (elapsed > LED_PATTERN_DOUBLE_BLINK_INTERVAL) {
+          // Reset for next cycle
+          doubleBlinksStartTime = 0;
+        }
+      }
+      break;
+      
+    default:
+      setLEDState(LOW);
+      break;
+  }
+}
+
+void updateMultipleLEDs() {
+  // Update each LED with its appropriate pattern based on current state
+  for (uint8_t i = 0; i < ledCount; i++) {
+    if (!leds[i].enabled) continue;
+    
+    switch (currentState) {
+      case STATE_AUTHENTICATED:
+      case STATE_MONITORING:
+        // LED behavior based on Teams presence using individual patterns
+        switch (currentPresence) {
+          case PRESENCE_BUSY:
+            applyLEDPattern(i, leds[i].callPattern);
+            break;
+          case PRESENCE_IN_MEETING:
+            applyLEDPattern(i, leds[i].meetingPattern);
+            break;
+          default:
+            applyLEDPattern(i, leds[i].availablePattern);
+            break;
+        }
+        break;
+      
+      default:
+        // For system states (AP mode, connecting, etc), use the legacy behavior
+        // but apply to all LEDs synchronously
+        break;
+    }
   }
 }
 
@@ -222,26 +478,13 @@ void updateLED() {
       break;
     case STATE_AUTHENTICATED:
     case STATE_MONITORING:
-      // LED behavior based on Teams presence
-      switch (currentPresence) {
-        case PRESENCE_IN_MEETING:
-        case PRESENCE_BUSY:
-          setLEDState(HIGH); // Solid red
-          if (lastLoggedState != STATE_MONITORING) {
-            LOG_INFOF("LED: Solid ON (presence: %s)", 
-                     currentPresence == PRESENCE_IN_MEETING ? "In Meeting" : "Busy");
-            lastLoggedState = STATE_MONITORING;
-          }
-          return;
-        default:
-          setLEDState(LOW); // Off
-          if (lastLoggedState != STATE_MONITORING) {
-            LOG_DEBUG("LED: OFF (available/away/offline)");
-            lastLoggedState = STATE_MONITORING;
-          }
-          return;
+      // Use the new multi-LED system for Teams presence
+      updateMultipleLEDs();
+      if (lastLoggedState != STATE_MONITORING) {
+        LOG_INFOF("LED: Using individual patterns for %d LEDs", ledCount);
+        lastLoggedState = STATE_MONITORING;
       }
-      break;
+      return;
     case STATE_ERROR:
       interval = LED_FAST_BLINK_INTERVAL;
       if (lastLoggedState != STATE_ERROR) {
@@ -251,6 +494,7 @@ void updateLED() {
       break;
   }
   
+  // For system states, use synchronized blinking on all LEDs
   if (millis() - lastLedToggle > interval) {
     ledState = !ledState;
     setLEDState(ledState ? HIGH : LOW);
@@ -535,9 +779,11 @@ void handleConfig() {
   html += ".section h3 { color: #d73502; margin-bottom: 1rem; font-size: 1.2rem; }";
   html += ".form-group { margin-bottom: 1rem; }";
   html += "label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333; }";
-  html += "input[type=\"text\"], input[type=\"password\"], input[type=\"email\"] { width: 100%; padding: 0.75rem; border: 2px solid #e9ecef; border-radius: 6px; font-size: 1rem; transition: border-color 0.2s ease; }";
-  html += "input:focus { outline: none; border-color: #d73502; }";
+  html += "input[type=\"text\"], input[type=\"password\"], input[type=\"email\"], select { width: 100%; padding: 0.75rem; border: 2px solid #e9ecef; border-radius: 6px; font-size: 1rem; transition: border-color 0.2s ease; }";
+  html += "input:focus, select:focus { outline: none; border-color: #d73502; }";
   html += ".help { font-size: 0.875rem; color: #6c757d; margin-top: 0.25rem; }";
+  html += ".led-config { border: 1px solid #dee2e6; border-radius: 6px; padding: 1rem; margin: 1rem 0; background: #fff; }";
+  html += ".led-config h4 { color: #495057; margin-bottom: 1rem; font-size: 1rem; border-bottom: 1px solid #dee2e6; padding-bottom: 0.5rem; }";
   html += ".actions { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 2rem; }";
   html += ".btn { background: #d73502; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; font-size: 1rem; cursor: pointer; transition: all 0.2s ease; text-decoration: none; text-align: center; display: inline-block; }";
   html += ".btn:hover { background: #b12d02; transform: translateY(-1px); }";
@@ -600,6 +846,95 @@ void handleConfig() {
   html += "<input type=\"text\" id=\"ota_url\" name=\"ota_url\" value=\"" + preferences.getString(OTA_UPDATE_URL_KEY, DEFAULT_OTA_URL) + "\" placeholder=\"https://github.com/...\">";
   html += "<div class=\"help\">&#x1F310; URL for over-the-air firmware updates</div>";
   html += "</div>";
+  html += "</div>";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F4A1; LED Pattern Settings</h3>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"led_count\">Number of LEDs</label>";
+  html += "<select id=\"led_count\" name=\"led_count\" onchange=\"updateLEDFields()\">";
+  for (uint8_t i = 1; i <= MAX_LEDS; i++) {
+    html += "<option value=\"" + String(i) + "\"" + String(ledCount == i ? " selected" : "") + ">" + String(i) + " LED" + (i > 1 ? "s" : "") + "</option>";
+  }
+  html += "</select>";
+  html += "<div class=\"help\">&#x1F4A1; Select the number of LEDs to configure</div>";
+  html += "</div>";
+  
+  html += "<div id=\"led_configurations\">";
+  for (uint8_t i = 0; i < MAX_LEDS; i++) {
+    html += "<div class=\"led-config\" id=\"led_config_" + String(i) + "\" style=\"" + String(i >= ledCount ? "display:none;" : "") + "\">";
+    html += "<h4>LED " + String(i + 1) + " Configuration</h4>";
+    
+    html += "<div class=\"form-group\">";
+    html += "<label for=\"led_pin_" + String(i) + "\">GPIO Pin</label>";
+    html += "<select id=\"led_pin_" + String(i) + "\" name=\"led_pin_" + String(i) + "\">";
+    for (uint8_t j = 0; j < availableGPIOCount; j++) {
+      uint8_t pin = availableGPIOPins[j];
+      uint8_t selectedPin = (i < ledCount) ? leds[i].pin : LED_PIN;
+      html += "<option value=\"" + String(pin) + "\"" + String(selectedPin == pin ? " selected" : "") + ">GPIO " + String(pin) + "</option>";
+    }
+    html += "</select>";
+    html += "<div class=\"help\">&#x1F50C; Select GPIO pin for this LED</div>";
+    html += "</div>";
+    
+    html += "<div class=\"form-group\">";
+    html += "<label for=\"led_call_" + String(i) + "\">Call Pattern</label>";
+    html += "<select id=\"led_call_" + String(i) + "\" name=\"led_call_" + String(i) + "\">";
+    LEDPattern callPat = (i < ledCount) ? leds[i].callPattern : DEFAULT_CALL_PATTERN;
+    html += "<option value=\"0\"" + String(callPat == 0 ? " selected" : "") + ">Off</option>";
+    html += "<option value=\"1\"" + String(callPat == 1 ? " selected" : "") + ">Solid</option>";
+    html += "<option value=\"2\"" + String(callPat == 2 ? " selected" : "") + ">Slow Blink (1s)</option>";
+    html += "<option value=\"3\"" + String(callPat == 3 ? " selected" : "") + ">Medium Blink (0.5s)</option>";
+    html += "<option value=\"4\"" + String(callPat == 4 ? " selected" : "") + ">Fast Blink (0.2s) (Default)</option>";
+    html += "<option value=\"5\"" + String(callPat == 5 ? " selected" : "") + ">Double Blink</option>";
+    html += "<option value=\"6\"" + String(callPat == 6 ? " selected" : "") + ">Dim Solid</option>";
+    html += "</select>";
+    html += "<div class=\"help\">&#x1F4F5; Pattern during calls (busy status)</div>";
+    html += "</div>";
+    
+    html += "<div class=\"form-group\">";
+    html += "<label for=\"led_meeting_" + String(i) + "\">Meeting Pattern</label>";
+    html += "<select id=\"led_meeting_" + String(i) + "\" name=\"led_meeting_" + String(i) + "\">";
+    LEDPattern meetPat = (i < ledCount) ? leds[i].meetingPattern : DEFAULT_MEETING_PATTERN;
+    html += "<option value=\"0\"" + String(meetPat == 0 ? " selected" : "") + ">Off</option>";
+    html += "<option value=\"1\"" + String(meetPat == 1 ? " selected" : "") + ">Solid (Default)</option>";
+    html += "<option value=\"2\"" + String(meetPat == 2 ? " selected" : "") + ">Slow Blink (1s)</option>";
+    html += "<option value=\"3\"" + String(meetPat == 3 ? " selected" : "") + ">Medium Blink (0.5s)</option>";
+    html += "<option value=\"4\"" + String(meetPat == 4 ? " selected" : "") + ">Fast Blink (0.2s)</option>";
+    html += "<option value=\"5\"" + String(meetPat == 5 ? " selected" : "") + ">Double Blink</option>";
+    html += "<option value=\"6\"" + String(meetPat == 6 ? " selected" : "") + ">Dim Solid</option>";
+    html += "</select>";
+    html += "<div class=\"help\">&#x1F4C5; Pattern during meetings</div>";
+    html += "</div>";
+    
+    html += "<div class=\"form-group\">";
+    html += "<label for=\"led_available_" + String(i) + "\">Available Pattern</label>";
+    html += "<select id=\"led_available_" + String(i) + "\" name=\"led_available_" + String(i) + "\">";
+    LEDPattern availPat = (i < ledCount) ? leds[i].availablePattern : DEFAULT_AVAILABLE_PATTERN;
+    html += "<option value=\"0\"" + String(availPat == 0 ? " selected" : "") + ">Off (Default)</option>";
+    html += "<option value=\"1\"" + String(availPat == 1 ? " selected" : "") + ">Solid</option>";
+    html += "<option value=\"2\"" + String(availPat == 2 ? " selected" : "") + ">Slow Blink (1s)</option>";
+    html += "<option value=\"3\"" + String(availPat == 3 ? " selected" : "") + ">Medium Blink (0.5s)</option>";
+    html += "<option value=\"4\"" + String(availPat == 4 ? " selected" : "") + ">Fast Blink (0.2s)</option>";
+    html += "<option value=\"5\"" + String(availPat == 5 ? " selected" : "") + ">Double Blink</option>";
+    html += "<option value=\"6\"" + String(availPat == 6 ? " selected" : "") + ">Dim Solid</option>";
+    html += "</select>";
+    html += "<div class=\"help\">&#x1F7E2; Pattern when available</div>";
+    html += "</div>";
+    html += "</div>";
+  }
+  html += "</div>";
+  
+  html += "<script>";
+  html += "function updateLEDFields() {";
+  html += "  var count = parseInt(document.getElementById('led_count').value);";
+  html += "  for (var i = 0; i < " + String(MAX_LEDS) + "; i++) {";
+  html += "    var element = document.getElementById('led_config_' + i);";
+  html += "    if (element) {";
+  html += "      element.style.display = i < count ? 'block' : 'none';";
+  html += "    }";
+  html += "  }";
+  html += "}";
+  html += "</script>";
   html += "</div>";
   html += "<div class=\"actions\">";
   html += "<button type=\"submit\" class=\"btn\">&#x1F4BE; Save Configuration</button>";
@@ -707,6 +1042,111 @@ void handleSave() {
       LOG_INFOF("OTA URL changed to: %s", otaUrl.c_str());
       preferences.putString(OTA_UPDATE_URL_KEY, otaUrl);
       configChanged = true;
+    }
+  }
+  
+  // Save LED pattern configuration
+  if (server.hasArg("led_count")) {
+    uint8_t newLedCount = server.arg("led_count").toInt();
+    if (newLedCount > MAX_LEDS) newLedCount = MAX_LEDS;
+    if (newLedCount < 1) newLedCount = 1;
+    
+    if (newLedCount != ledCount) {
+      LOG_INFOF("LED count changed from %d to %d", ledCount, newLedCount);
+      ledCount = newLedCount;
+      configChanged = true;
+    }
+    
+    // Save individual LED configurations
+    for (uint8_t i = 0; i < ledCount; i++) {
+      String pinArg = "led_pin_" + String(i);
+      String callArg = "led_call_" + String(i);
+      String meetArg = "led_meeting_" + String(i);
+      String availArg = "led_available_" + String(i);
+      
+      if (server.hasArg(pinArg)) {
+        uint8_t newPin = server.arg(pinArg).toInt();
+        if (i >= MAX_LEDS) continue; // Safety check
+        
+        if (i < MAX_LEDS && (i >= ledCount || leds[i].pin != newPin)) {
+          if (i < ledCount) {
+            LOG_INFOF("LED %d pin changed from %d to %d", i, leds[i].pin, newPin);
+          }
+          leds[i].pin = newPin;
+          leds[i].enabled = true;
+          configChanged = true;
+        }
+      }
+      
+      if (server.hasArg(callArg)) {
+        LEDPattern newPattern = (LEDPattern)server.arg(callArg).toInt();
+        if (i < MAX_LEDS && (i >= ledCount || leds[i].callPattern != newPattern)) {
+          if (i < ledCount) {
+            LOG_INFOF("LED %d call pattern changed from %d to %d", i, leds[i].callPattern, newPattern);
+          }
+          leds[i].callPattern = newPattern;
+          configChanged = true;
+        }
+      }
+      
+      if (server.hasArg(meetArg)) {
+        LEDPattern newPattern = (LEDPattern)server.arg(meetArg).toInt();
+        if (i < MAX_LEDS && (i >= ledCount || leds[i].meetingPattern != newPattern)) {
+          if (i < ledCount) {
+            LOG_INFOF("LED %d meeting pattern changed from %d to %d", i, leds[i].meetingPattern, newPattern);
+          }
+          leds[i].meetingPattern = newPattern;
+          configChanged = true;
+        }
+      }
+      
+      if (server.hasArg(availArg)) {
+        LEDPattern newPattern = (LEDPattern)server.arg(availArg).toInt();
+        if (i < MAX_LEDS && (i >= ledCount || leds[i].availablePattern != newPattern)) {
+          if (i < ledCount) {
+            LOG_INFOF("LED %d available pattern changed from %d to %d", i, leds[i].availablePattern, newPattern);
+          }
+          leds[i].availablePattern = newPattern;
+          configChanged = true;
+        }
+      }
+      
+      // Initialize LED state variables
+      if (i < MAX_LEDS) {
+        leds[i].lastToggle = 0;
+        leds[i].state = false;
+        leds[i].doubleBlinksStartTime = 0;
+        leds[i].doubleBlinksState = false;
+        leds[i].doubleBlinksCount = 0;
+      }
+    }
+    
+    // Update legacy patterns for backward compatibility (use first LED)
+    if (ledCount > 0) {
+      callPattern = leds[0].callPattern;
+      meetingPattern = leds[0].meetingPattern;
+      availablePattern = leds[0].availablePattern;
+    }
+  } else {
+    // Legacy LED pattern handling for backward compatibility
+    if (server.hasArg("meeting_pattern")) {
+      LEDPattern newMeetingPattern = (LEDPattern)server.arg("meeting_pattern").toInt();
+      if (newMeetingPattern != meetingPattern) {
+        LOG_INFOF("Meeting LED pattern changed from %d to %d", meetingPattern, newMeetingPattern);
+        meetingPattern = newMeetingPattern;
+        preferences.putUInt(KEY_MEETING_PATTERN, meetingPattern);
+        configChanged = true;
+      }
+    }
+    
+    if (server.hasArg("no_meeting_pattern")) {
+      LEDPattern newNoMeetingPattern = (LEDPattern)server.arg("no_meeting_pattern").toInt();
+      if (newNoMeetingPattern != noMeetingPattern) {
+        LOG_INFOF("No meeting LED pattern changed from %d to %d", noMeetingPattern, newNoMeetingPattern);
+        noMeetingPattern = newNoMeetingPattern;
+        preferences.putUInt(KEY_NO_MEETING_PATTERN, noMeetingPattern);
+        configChanged = true;
+      }
     }
   }
   
@@ -1402,6 +1842,39 @@ void loadConfiguration() {
   verificationUri = preferences.getString(KEY_VERIFICATION_URI, "");
   deviceCodeExpires = preferences.getULong64(KEY_DEVICE_CODE_EXPIRES, 0);
   
+  // Load LED pattern preferences (legacy for backward compatibility)
+  callPattern = (LEDPattern)preferences.getUInt("call_pattern", DEFAULT_CALL_PATTERN);
+  meetingPattern = (LEDPattern)preferences.getUInt(KEY_MEETING_PATTERN, DEFAULT_MEETING_PATTERN);
+  availablePattern = (LEDPattern)preferences.getUInt(KEY_NO_MEETING_PATTERN, DEFAULT_AVAILABLE_PATTERN);
+  
+  // Load multiple LED configuration
+  ledCount = preferences.getUInt(KEY_LED_COUNT, 0);
+  if (ledCount > MAX_LEDS) ledCount = MAX_LEDS;
+  
+  if (ledCount == 0) {
+    // Initialize with default LED for backward compatibility
+    initDefaultLEDs();
+  } else {
+    // Load configured LEDs
+    for (uint8_t i = 0; i < ledCount; i++) {
+      String pinKey = String(KEY_LED_PIN_PREFIX) + String(i);
+      String callKey = String(KEY_LED_CALL_PATTERN_PREFIX) + String(i);
+      String meetKey = String(KEY_LED_MEETING_PATTERN_PREFIX) + String(i);
+      String availKey = String(KEY_LED_AVAILABLE_PATTERN_PREFIX) + String(i);
+      
+      leds[i].pin = preferences.getUInt(pinKey.c_str(), LED_PIN);
+      leds[i].callPattern = (LEDPattern)preferences.getUInt(callKey.c_str(), DEFAULT_CALL_PATTERN);
+      leds[i].meetingPattern = (LEDPattern)preferences.getUInt(meetKey.c_str(), DEFAULT_MEETING_PATTERN);
+      leds[i].availablePattern = (LEDPattern)preferences.getUInt(availKey.c_str(), DEFAULT_AVAILABLE_PATTERN);
+      leds[i].enabled = true;
+      leds[i].lastToggle = 0;
+      leds[i].state = false;
+      leds[i].doubleBlinksStartTime = 0;
+      leds[i].doubleBlinksState = false;
+      leds[i].doubleBlinksCount = 0;
+    }
+  }
+  
   // Log configuration status (without sensitive data)
   LOG_INFOF("WiFi SSID: %s", wifiSSID.length() > 0 ? wifiSSID.c_str() : "(not configured)");
   LOG_INFOF("WiFi Password: %s", wifiPassword.length() > 0 ? "(configured)" : "(not configured)");
@@ -1411,6 +1884,14 @@ void loadConfiguration() {
   LOG_INFOF("Client Secret: %s", clientSecret.length() > 0 ? "(configured)" : "(not configured)");
   LOG_INFOF("Access Token: %s", accessToken.length() > 0 ? "(available)" : "(not available)");
   LOG_INFOF("Refresh Token: %s", refreshToken.length() > 0 ? "(available)" : "(not available)");
+  LOG_INFOF("Call LED Pattern: %d", callPattern);
+  LOG_INFOF("Meeting LED Pattern: %d", meetingPattern);
+  LOG_INFOF("Available LED Pattern: %d", availablePattern);
+  LOG_INFOF("LED Count: %d", ledCount);
+  for (uint8_t i = 0; i < ledCount; i++) {
+    LOG_INFOF("LED %d: GPIO %d, Call: %d, Meeting: %d, Available: %d", 
+              i, leds[i].pin, leds[i].callPattern, leds[i].meetingPattern, leds[i].availablePattern);
+  }
   
   if (tokenExpires > 0) {
     long timeToExpiry = (long)(tokenExpires - millis()) / 1000;
@@ -1436,6 +1917,25 @@ void saveConfiguration() {
   preferences.putString(KEY_ACCESS_TOKEN, accessToken);
   preferences.putString(KEY_REFRESH_TOKEN, refreshToken);
   preferences.putULong64(KEY_TOKEN_EXPIRES, tokenExpires);
+  
+  // Save LED pattern preferences (legacy for backward compatibility)
+  preferences.putUInt("call_pattern", callPattern);
+  preferences.putUInt(KEY_MEETING_PATTERN, meetingPattern);
+  preferences.putUInt(KEY_NO_MEETING_PATTERN, availablePattern);
+  
+  // Save multiple LED configuration
+  preferences.putUInt(KEY_LED_COUNT, ledCount);
+  for (uint8_t i = 0; i < ledCount; i++) {
+    String pinKey = String(KEY_LED_PIN_PREFIX) + String(i);
+    String callKey = String(KEY_LED_CALL_PATTERN_PREFIX) + String(i);
+    String meetKey = String(KEY_LED_MEETING_PATTERN_PREFIX) + String(i);
+    String availKey = String(KEY_LED_AVAILABLE_PATTERN_PREFIX) + String(i);
+    
+    preferences.putUInt(pinKey.c_str(), leds[i].pin);
+    preferences.putUInt(callKey.c_str(), leds[i].callPattern);
+    preferences.putUInt(meetKey.c_str(), leds[i].meetingPattern);
+    preferences.putUInt(availKey.c_str(), leds[i].availablePattern);
+  }
   
   LOG_INFO("Configuration saved successfully");
 }

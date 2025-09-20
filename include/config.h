@@ -7,7 +7,8 @@
 #define AP_TIMEOUT 300000  // 5 minutes
 
 // LED Configuration
-#define LED_PIN 2                        // External LED pin
+#define MAX_LEDS 8                       // Maximum number of configurable LEDs
+#define LED_PIN 2                        // Default external LED pin (for backward compatibility)
 #ifndef LED_BUILTIN
   #define LED_BUILTIN_PIN 2             // Onboard LED pin (fallback if not defined by board)
 #else
@@ -16,6 +17,9 @@
 #define LED_SLOW_BLINK_INTERVAL 1000    // 1 second - no network
 #define LED_FAST_BLINK_INTERVAL 200     // 200ms - connecting to O365
 #define LED_VERY_FAST_BLINK_INTERVAL 100 // 100ms - AP mode
+
+// Available GPIO pins for LEDs on ESP32
+#define AVAILABLE_GPIO_PINS {2, 4, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33}
 
 // Network Configuration
 #define HTTP_PORT 80
@@ -48,11 +52,41 @@
 #define KEY_VERIFICATION_URI "verify_uri"
 #define KEY_DEVICE_CODE_EXPIRES "dev_code_exp"
 
-
+// LED Pattern Storage Keys
+#define KEY_MEETING_PATTERN "meeting_pattern"
+#define KEY_NO_MEETING_PATTERN "no_meeting_pattern"
+#define KEY_LED_COUNT "led_count"
+#define KEY_LED_PIN_PREFIX "led_pin_"
+#define KEY_LED_CALL_PATTERN_PREFIX "led_call_"
+#define KEY_LED_MEETING_PATTERN_PREFIX "led_meet_"
+#define KEY_LED_AVAILABLE_PATTERN_PREFIX "led_avail_"
 
 // Update Configuration
 #define OTA_UPDATE_URL_KEY "ota_url"
 #define DEFAULT_OTA_URL "https://github.com/fchapleau/teams-redlight/releases/latest/download/firmware.bin"
+
+// LED Pattern Types
+enum LEDPattern {
+  PATTERN_OFF = 0,
+  PATTERN_SOLID = 1,
+  PATTERN_SLOW_BLINK = 2,       // 1000ms intervals
+  PATTERN_MEDIUM_BLINK = 3,     // 500ms intervals  
+  PATTERN_FAST_BLINK = 4,       // 200ms intervals
+  PATTERN_DOUBLE_BLINK = 5,     // Double blink every 1000ms
+  PATTERN_DIM_SOLID = 6         // Always on but dimmed (for PWM-capable pins)
+};
+
+// Default LED patterns
+#define DEFAULT_CALL_PATTERN PATTERN_FAST_BLINK
+#define DEFAULT_MEETING_PATTERN PATTERN_SOLID
+#define DEFAULT_AVAILABLE_PATTERN PATTERN_OFF
+
+// LED Pattern Intervals
+#define LED_PATTERN_SLOW_BLINK_INTERVAL 1000     // 1 second
+#define LED_PATTERN_MEDIUM_BLINK_INTERVAL 500    // 500ms
+#define LED_PATTERN_FAST_BLINK_INTERVAL 200      // 200ms
+#define LED_PATTERN_DOUBLE_BLINK_INTERVAL 1000   // 1 second cycle
+#define LED_PATTERN_DOUBLE_BLINK_ON_TIME 100     // 100ms on time for double blink
 
 // Device States
 enum DeviceState {
@@ -73,6 +107,21 @@ enum TeamsPresence {
   PRESENCE_IN_MEETING,
   PRESENCE_AWAY,
   PRESENCE_OFFLINE
+};
+
+// LED Configuration Structure
+struct LEDConfig {
+  uint8_t pin;
+  LEDPattern callPattern;
+  LEDPattern meetingPattern;
+  LEDPattern availablePattern;
+  bool enabled;
+  // Pattern state variables
+  unsigned long lastToggle;
+  bool state;
+  unsigned long doubleBlinksStartTime;
+  bool doubleBlinksState;
+  int doubleBlinksCount;
 };
 
 #endif // CONFIG_H
