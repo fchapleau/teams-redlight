@@ -60,6 +60,8 @@
 #define KEY_LED_CALL_PATTERN_PREFIX "led_call_"
 #define KEY_LED_MEETING_PATTERN_PREFIX "led_meet_"
 #define KEY_LED_AVAILABLE_PATTERN_PREFIX "led_avail_"
+#define KEY_LED_AWAY_PATTERN_PREFIX "led_away_"
+#define KEY_LED_OFFLINE_PATTERN_PREFIX "led_offline_"
 
 // Update Configuration
 #define OTA_UPDATE_URL_KEY "ota_url"
@@ -80,6 +82,8 @@ enum LEDPattern {
 #define DEFAULT_CALL_PATTERN PATTERN_FAST_BLINK
 #define DEFAULT_MEETING_PATTERN PATTERN_SOLID
 #define DEFAULT_AVAILABLE_PATTERN PATTERN_OFF
+#define DEFAULT_AWAY_PATTERN PATTERN_OFF
+#define DEFAULT_OFFLINE_PATTERN PATTERN_OFF
 
 // LED Pattern Intervals
 #define LED_PATTERN_SLOW_BLINK_INTERVAL 1000     // 1 second
@@ -115,6 +119,8 @@ struct LEDConfig {
   LEDPattern callPattern;
   LEDPattern meetingPattern;
   LEDPattern availablePattern;
+  LEDPattern awayPattern;
+  LEDPattern offlinePattern;
   bool enabled;
   // Pattern state variables
   unsigned long lastToggle;
