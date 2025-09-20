@@ -75,6 +75,7 @@ void handleLogin();
 void handleCallback();
 bool startDeviceCodeFlow();
 bool pollDeviceCodeToken();
+bool pollDeviceCodeTokenWithSecret();
 void checkTeamsPresence();
 bool refreshAccessToken();
 void loadConfiguration();
@@ -1734,6 +1735,16 @@ bool pollDeviceCodeToken() {
         currentState = STATE_CONNECTING_OAUTH;
         http.end();
         return false;
+      } else if (error == "invalid_client" && doc.containsKey("error_description")) {
+        String errorDesc = doc["error_description"].as<String>();
+        if (errorDesc.indexOf("AADSTS7000218") >= 0 && clientSecret.length() > 0) {
+          LOG_WARN("Azure AD requires client authentication for device code flow - retrying with client_secret");
+          http.end();
+          return pollDeviceCodeTokenWithSecret();
+        } else {
+          LOG_ERRORF("OAuth error: %s", error.c_str());
+          LOG_ERRORF("Error description: %s", errorDesc.c_str());
+        }
       } else {
         LOG_ERRORF("OAuth error: %s", error.c_str());
         if (doc.containsKey("error_description")) {
@@ -1746,6 +1757,109 @@ bool pollDeviceCodeToken() {
     return false;
   } else {
     LOG_ERRORF("Token poll failed with HTTP %d", httpCode);
+    http.end();
+    return false;
+  }
+}
+
+bool pollDeviceCodeTokenWithSecret() {
+  if (deviceCode.length() == 0) {
+    LOG_ERROR("No device code available for polling with secret");
+    return false;
+  }
+  
+  if (clientSecret.length() == 0) {
+    LOG_ERROR("No client secret available for confidential client authentication");
+    return false;
+  }
+  
+  LOG_DEBUG("Polling for device code token with client secret (confidential client)");
+  
+  HTTPClient http;
+  String tokenUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token";
+  
+  http.begin(tokenUrl);
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  
+  String postData = "grant_type=urn:ietf:params:oauth:grant-type:device_code";
+  postData += "&client_id=" + clientId;
+  postData += "&client_secret=" + clientSecret;
+  postData += "&device_code=" + deviceCode;
+  
+  int httpCode = http.POST(postData);
+  LOG_DEBUGF("Token poll with secret response: HTTP %d", httpCode);
+  
+  if (httpCode == HTTP_CODE_OK || httpCode == 400 || httpCode == 401) {
+    String payload = http.getString();
+    LOG_DEBUGF("Token response payload length: %d", payload.length());
+    
+    DynamicJsonDocument doc(2048);
+    DeserializationError error = deserializeJson(doc, payload);
+    
+    if (error) {
+      LOG_ERRORF("Failed to parse token response JSON: %s", error.c_str());
+      http.end();
+      return false;
+    }
+    
+    if (doc.containsKey("access_token")) {
+      accessToken = doc["access_token"].as<String>();
+      refreshToken = doc["refresh_token"].as<String>();
+      unsigned long expiresIn = doc["expires_in"].as<unsigned long>();
+      tokenExpires = millis() + (expiresIn * 1000);
+      
+      LOG_INFO("Device code authentication with secret successful!");
+      LOG_INFOF("Access token length: %d", accessToken.length());
+      LOG_INFOF("Refresh token length: %d", refreshToken.length());
+      LOG_INFOF("Token expires in: %lu seconds", expiresIn);
+      
+      preferences.putString(KEY_ACCESS_TOKEN, accessToken);
+      preferences.putString(KEY_REFRESH_TOKEN, refreshToken);
+      preferences.putULong64(KEY_TOKEN_EXPIRES, tokenExpires);
+      
+      // Clear device code data
+      preferences.remove(KEY_DEVICE_CODE);
+      preferences.remove(KEY_USER_CODE);
+      preferences.remove(KEY_VERIFICATION_URI);
+      preferences.remove(KEY_DEVICE_CODE_EXPIRES);
+      deviceCode = "";
+      userCode = "";
+      verificationUri = "";
+      deviceCodeExpires = 0;
+      
+      http.end();
+      return true;
+    } else if (doc.containsKey("error")) {
+      String error = doc["error"].as<String>();
+      
+      if (error == "authorization_pending") {
+        LOG_DEBUG("Authorization still pending, will continue polling");
+      } else if (error == "slow_down") {
+        LOG_DEBUG("Rate limited, slowing down polling");
+        // Add extra delay for next poll
+        lastDeviceCodePoll += 5000;
+      } else if (error == "authorization_declined") {
+        LOG_WARN("User declined authorization");
+        currentState = STATE_CONNECTING_OAUTH;
+        http.end();
+        return false;
+      } else if (error == "expired_token") {
+        LOG_WARN("Device code expired");
+        currentState = STATE_CONNECTING_OAUTH;
+        http.end();
+        return false;
+      } else {
+        LOG_ERRORF("OAuth error with secret: %s", error.c_str());
+        if (doc.containsKey("error_description")) {
+          LOG_ERRORF("Error description: %s", doc["error_description"].as<String>().c_str());
+        }
+      }
+    }
+    
+    http.end();
+    return false;
+  } else {
+    LOG_ERRORF("Token poll with secret failed with HTTP %d", httpCode);
     http.end();
     return false;
   }
