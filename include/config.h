@@ -20,12 +20,17 @@
 // Network Configuration
 #define HTTP_PORT 80
 #define HTTPS_PORT 443
-#define ENABLE_HTTPS true   // Enable HTTPS support
+#define ENABLE_HTTPS false   // Disable HTTPS support - no longer required
 
 // Microsoft Graph API Configuration
 #define GRAPH_API_HOST "graph.microsoft.com"
 #define GRAPH_API_ENDPOINT "/v1.0/me/presence"
 #define GRAPH_LOGIN_HOST "login.microsoftonline.com"
+
+// Device Code Flow Configuration
+#define DEVICE_CODE_SCOPE "https://graph.microsoft.com/Presence.Read offline_access"
+#define DEVICE_CODE_POLL_INTERVAL 5000  // 5 seconds
+#define DEVICE_CODE_TIMEOUT 900000      // 15 minutes
 
 // Storage Keys
 #define PREF_NAMESPACE "teamslight"
@@ -38,6 +43,12 @@
 #define KEY_ACCESS_TOKEN "access_token"
 #define KEY_REFRESH_TOKEN "refresh_token"
 #define KEY_TOKEN_EXPIRES "token_expires"
+
+// Device Code Flow Storage Keys
+#define KEY_DEVICE_CODE "device_code"
+#define KEY_USER_CODE "user_code"
+#define KEY_VERIFICATION_URI "verify_uri"
+#define KEY_DEVICE_CODE_EXPIRES "dev_code_exp"
 
 // SSL Certificate Storage Keys
 #define KEY_SSL_CERT "ssl_cert"
@@ -53,6 +64,7 @@ enum DeviceState {
   STATE_AP_MODE,
   STATE_CONNECTING_WIFI,
   STATE_CONNECTING_OAUTH,
+  STATE_DEVICE_CODE_PENDING,  // New state for device code flow
   STATE_AUTHENTICATED,
   STATE_MONITORING,
   STATE_ERROR

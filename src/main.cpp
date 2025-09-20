@@ -3,7 +3,9 @@
 #include <WebServer.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#if ENABLE_HTTPS
 #include <WiFiServerSecure.h>
+#endif
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <Update.h>
@@ -36,6 +38,13 @@ String userEmail;
 String accessToken;
 String refreshToken;
 
+// Device Code Flow variables
+String deviceCode;
+String userCode;
+String verificationUri;
+unsigned long deviceCodeExpires = 0;
+unsigned long lastDeviceCodePoll = 0;
+
 // SSL Configuration variables
 #if ENABLE_HTTPS
 bool httpsEnabled = true;  // HTTPS is always enabled
@@ -65,6 +74,8 @@ void handleStatus();
 void handleUpdate();
 void handleLogin();
 void handleCallback();
+bool startDeviceCodeFlow();
+bool pollDeviceCodeToken();
 void checkTeamsPresence();
 bool refreshAccessToken();
 void loadConfiguration();
@@ -84,6 +95,13 @@ void setup() {
   LOG_DEBUG("Loading configuration");
   // Load saved configuration
   loadConfiguration();
+  
+  // Check if device code flow was in progress
+  if (deviceCode.length() > 0 && deviceCodeExpires > millis()) {
+    LOG_INFO("Resuming device code flow from previous session");
+    currentState = STATE_DEVICE_CODE_PENDING;
+    lastDeviceCodePoll = millis();
+  }
   
   // Set up WiFi
   if (wifiSSID.length() > 0) {
@@ -141,6 +159,20 @@ void loop() {
     case STATE_CONNECTING_OAUTH:
       LOG_DEBUG("Waiting for OAuth configuration...");
       // Wait for OAuth configuration
+      break;
+      
+    case STATE_DEVICE_CODE_PENDING:
+      // Poll for device code completion
+      if (millis() - lastDeviceCodePoll > DEVICE_CODE_POLL_INTERVAL) {
+        if (millis() > deviceCodeExpires) {
+          LOG_WARN("Device code expired, returning to OAuth state");
+          currentState = STATE_CONNECTING_OAUTH;
+        } else if (pollDeviceCodeToken()) {
+          LOG_INFO("Device code authentication successful!");
+          currentState = STATE_AUTHENTICATED;
+        }
+        lastDeviceCodePoll = millis();
+      }
       break;
       
     case STATE_AUTHENTICATED:
@@ -369,8 +401,27 @@ void setupWebServer() {
   });
   
   server.on("/callback", [](){
-    LOG_INFO("Processing OAuth callback");
-    handleCallback();
+    LOG_INFO("OAuth callback accessed - redirecting to device code flow");
+    server.send(200, "text/html", R"(
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Authentication Method Changed</title>
+    <meta http-equiv="refresh" content="3;url=/">
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+        .message { background-color: #d1ecf1; color: #0c5460; padding: 20px; border-radius: 5px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="message">
+        <h2>ℹ️ Authentication Method Updated</h2>
+        <p>This device now uses Device Code Flow for improved security.</p>
+        <p>No redirect URLs required! You will be redirected to the home page.</p>
+    </div>
+</body>
+</html>
+    )");
   });
   
   server.on("/restart", HTTP_POST, [](){
@@ -560,11 +611,14 @@ void handleConfig() {
             <h3>Setup Instructions</h3>
             <ol>
                 <li>Register an application in Azure AD with the following permissions: <code>Presence.Read</code></li>
-                <li>Configure the redirect URI to: <code>http://[device-ip]/callback</code></li>
+                <li><strong>No redirect URI needed!</strong> Device Code Flow eliminates SSL requirements</li>
                 <li>Enter your application credentials above</li>
                 <li>Save the configuration</li>
-                <li>Click "Authenticate with Microsoft" and follow the prompts</li>
+                <li>Click "Authenticate with Microsoft" - you'll get a code to enter on your phone/computer</li>
             </ol>
+            <div style="background: #e8f5e8; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                <strong>✅ Improved Security:</strong> This device now uses Device Code Flow, which eliminates the need for redirect URLs and SSL certificates while maintaining full security.
+            </div>
         </div>
     </div>
 </body>
@@ -699,6 +753,20 @@ void handleStatus() {
       doc["state"] = "connecting_oauth";
       doc["message"] = "Waiting for OAuth authentication";
       break;
+    case STATE_DEVICE_CODE_PENDING:
+      doc["state"] = "device_code_pending";
+      doc["message"] = "Waiting for device code authentication";
+      if (userCode.length() > 0) {
+        doc["user_code"] = userCode;
+        doc["verification_uri"] = verificationUri;
+        long timeRemaining = (long)(deviceCodeExpires - millis()) / 1000;
+        if (timeRemaining > 0) {
+          doc["expires_in"] = timeRemaining;
+        } else {
+          doc["expired"] = true;
+        }
+      }
+      break;
     case STATE_AUTHENTICATED:
       doc["state"] = "authenticated";
       doc["message"] = "Authenticated, starting monitoring";
@@ -760,31 +828,117 @@ void handleUpdate() {
 }
 
 void handleLogin() {
-  LOG_INFO("OAuth login request received");
+  LOG_INFO("Device code authentication request received");
   
   if (clientId.length() == 0 || tenantId.length() == 0) {
-    LOG_ERROR("OAuth login failed - missing client ID or tenant ID");
+    LOG_ERROR("Authentication failed - missing client ID or tenant ID");
     server.send(400, "text/plain", "Client ID and Tenant ID must be configured first");
     return;
   }
   
-  String deviceIP = WiFi.localIP().toString();
-  String redirectUri = "http://" + deviceIP + "/callback";
-  String authUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/authorize";
-  authUrl += "?client_id=" + clientId;
-  authUrl += "&response_type=code";
-  authUrl += "&redirect_uri=" + redirectUri;
-  authUrl += "&scope=https://graph.microsoft.com/Presence.Read";
-  authUrl += "&response_mode=query";
-  
-  LOG_INFOF("Redirecting to Microsoft OAuth URL");
-  LOG_DEBUGF("Tenant ID: %s", tenantId.c_str());
-  LOG_DEBUGF("Client ID: %s", clientId.c_str());
-  LOG_DEBUGF("Redirect URI: %s", redirectUri.c_str());
-  LOG_DEBUGF("Full auth URL: %s", authUrl.c_str());
-  
-  server.sendHeader("Location", authUrl);
-  server.send(302, "text/plain", "Redirecting to Microsoft login...");
+  // Start device code flow
+  if (startDeviceCodeFlow()) {
+    LOG_INFO("Device code flow started successfully");
+    
+    // Display the user code and verification URL to the user
+    String html = R"(
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teams Red Light - Device Authentication</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="10;url=/status">
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            margin: 20px; 
+            background-color: #f5f5f5;
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 30px; 
+            border-radius: 10px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .user-code { 
+            font-size: 2em; 
+            font-weight: bold; 
+            color: #0078d4; 
+            margin: 20px 0; 
+            padding: 15px; 
+            background: #f0f8ff; 
+            border-radius: 5px;
+            letter-spacing: 3px;
+        }
+        .instructions {
+            margin: 20px 0;
+            line-height: 1.6;
+        }
+        .verification-url {
+            background: #e8f4f8;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 15px 0;
+            word-break: break-all;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            background: #fff3cd;
+            border-radius: 5px;
+            color: #856404;
+        }
+        .button {
+            background: #0078d4;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔴 Teams Red Light Authentication</h1>
+        
+        <div class="instructions">
+            <h2>Step 1: Visit the Microsoft login page</h2>
+            <div class="verification-url">
+                <strong>Go to:</strong> <a href=")" + verificationUri + R"(" target="_blank">)" + verificationUri + R"(</a>
+            </div>
+            
+            <h2>Step 2: Enter this code</h2>
+            <div class="user-code">)" + userCode + R"(</div>
+            
+            <h2>Step 3: Sign in with your Teams account</h2>
+            <p>After entering the code, sign in with your Microsoft Teams/Office 365 account and authorize the application.</p>
+        </div>
+        
+        <div class="status">
+            <strong>Waiting for authentication...</strong><br>
+            This page will refresh automatically. You can also <a href="/status">check status</a> manually.
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <a href=")" + verificationUri + R"(" target="_blank" class="button">Open Microsoft Login</a>
+            <a href="/status" class="button">Check Status</a>
+        </div>
+    </div>
+</body>
+</html>
+    )";
+    
+    server.send(200, "text/html", html);
+  } else {
+    LOG_ERROR("Failed to start device code flow");
+    server.send(500, "text/plain", "Failed to start authentication process. Please try again.");
+  }
 }
 
 void handleCallback() {
@@ -890,6 +1044,167 @@ void handleCallback() {
   } else {
     LOG_ERROR("OAuth callback received without authorization code or error");
     server.send(400, "text/plain", "Authentication failed: No authorization code received");
+  }
+}
+
+bool startDeviceCodeFlow() {
+  LOG_INFO("Starting device code flow");
+  
+  HTTPClient http;
+  String deviceCodeUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/devicecode";
+  
+  http.begin(deviceCodeUrl);
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  
+  String postData = "client_id=" + clientId;
+  postData += "&scope=" + String(DEVICE_CODE_SCOPE);
+  
+  LOG_DEBUGF("Device code request URL: %s", deviceCodeUrl.c_str());
+  LOG_DEBUG("Sending device code request...");
+  
+  int httpCode = http.POST(postData);
+  LOG_INFOF("Device code response: HTTP %d", httpCode);
+  
+  if (httpCode == HTTP_CODE_OK) {
+    String payload = http.getString();
+    LOG_DEBUGF("Device code response payload length: %d", payload.length());
+    
+    DynamicJsonDocument doc(1024);
+    DeserializationError error = deserializeJson(doc, payload);
+    
+    if (error) {
+      LOG_ERRORF("Failed to parse device code response JSON: %s", error.c_str());
+      http.end();
+      return false;
+    }
+    
+    deviceCode = doc["device_code"].as<String>();
+    userCode = doc["user_code"].as<String>();
+    verificationUri = doc["verification_uri"].as<String>();
+    unsigned long expiresIn = doc["expires_in"].as<unsigned long>();
+    deviceCodeExpires = millis() + (expiresIn * 1000);
+    
+    LOG_INFO("Device code flow initiated successfully");
+    LOG_INFOF("User code: %s", userCode.c_str());
+    LOG_INFOF("Verification URI: %s", verificationUri.c_str());
+    LOG_INFOF("Device code expires in: %lu seconds", expiresIn);
+    
+    // Save device code data
+    preferences.putString(KEY_DEVICE_CODE, deviceCode);
+    preferences.putString(KEY_USER_CODE, userCode);
+    preferences.putString(KEY_VERIFICATION_URI, verificationUri);
+    preferences.putULong64(KEY_DEVICE_CODE_EXPIRES, deviceCodeExpires);
+    
+    currentState = STATE_DEVICE_CODE_PENDING;
+    lastDeviceCodePoll = millis();
+    
+    http.end();
+    return true;
+  } else {
+    LOG_ERRORF("Device code request failed with HTTP %d", httpCode);
+    String response = http.getString();
+    if (response.length() > 0) {
+      LOG_DEBUGF("Error response: %s", response.c_str());
+    }
+    http.end();
+    return false;
+  }
+}
+
+bool pollDeviceCodeToken() {
+  if (deviceCode.length() == 0) {
+    LOG_ERROR("No device code available for polling");
+    return false;
+  }
+  
+  LOG_DEBUG("Polling for device code token");
+  
+  HTTPClient http;
+  String tokenUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token";
+  
+  http.begin(tokenUrl);
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  
+  String postData = "grant_type=urn:ietf:params:oauth:grant-type:device_code";
+  postData += "&client_id=" + clientId;
+  postData += "&device_code=" + deviceCode;
+  
+  int httpCode = http.POST(postData);
+  LOG_DEBUGF("Token poll response: HTTP %d", httpCode);
+  
+  if (httpCode == HTTP_CODE_OK) {
+    String payload = http.getString();
+    LOG_DEBUGF("Token response payload length: %d", payload.length());
+    
+    DynamicJsonDocument doc(2048);
+    DeserializationError error = deserializeJson(doc, payload);
+    
+    if (error) {
+      LOG_ERRORF("Failed to parse token response JSON: %s", error.c_str());
+      http.end();
+      return false;
+    }
+    
+    if (doc.containsKey("access_token")) {
+      accessToken = doc["access_token"].as<String>();
+      refreshToken = doc["refresh_token"].as<String>();
+      unsigned long expiresIn = doc["expires_in"].as<unsigned long>();
+      tokenExpires = millis() + (expiresIn * 1000);
+      
+      LOG_INFO("Device code authentication successful!");
+      LOG_INFOF("Access token length: %d", accessToken.length());
+      LOG_INFOF("Refresh token length: %d", refreshToken.length());
+      LOG_INFOF("Token expires in: %lu seconds", expiresIn);
+      
+      preferences.putString(KEY_ACCESS_TOKEN, accessToken);
+      preferences.putString(KEY_REFRESH_TOKEN, refreshToken);
+      preferences.putULong64(KEY_TOKEN_EXPIRES, tokenExpires);
+      
+      // Clear device code data
+      preferences.remove(KEY_DEVICE_CODE);
+      preferences.remove(KEY_USER_CODE);
+      preferences.remove(KEY_VERIFICATION_URI);
+      preferences.remove(KEY_DEVICE_CODE_EXPIRES);
+      deviceCode = "";
+      userCode = "";
+      verificationUri = "";
+      deviceCodeExpires = 0;
+      
+      http.end();
+      return true;
+    } else if (doc.containsKey("error")) {
+      String error = doc["error"].as<String>();
+      
+      if (error == "authorization_pending") {
+        LOG_DEBUG("Authorization still pending, will continue polling");
+      } else if (error == "slow_down") {
+        LOG_DEBUG("Rate limited, slowing down polling");
+        // Add extra delay for next poll
+        lastDeviceCodePoll += 5000;
+      } else if (error == "authorization_declined") {
+        LOG_WARN("User declined authorization");
+        currentState = STATE_CONNECTING_OAUTH;
+        http.end();
+        return false;
+      } else if (error == "expired_token") {
+        LOG_WARN("Device code expired");
+        currentState = STATE_CONNECTING_OAUTH;
+        http.end();
+        return false;
+      } else {
+        LOG_ERRORF("OAuth error: %s", error.c_str());
+        if (doc.containsKey("error_description")) {
+          LOG_ERRORF("Error description: %s", doc["error_description"].as<String>().c_str());
+        }
+      }
+    }
+    
+    http.end();
+    return false;
+  } else {
+    LOG_ERRORF("Token poll failed with HTTP %d", httpCode);
+    http.end();
+    return false;
   }
 }
 
@@ -1081,6 +1396,12 @@ void loadConfiguration() {
   accessToken = preferences.getString(KEY_ACCESS_TOKEN, "");
   refreshToken = preferences.getString(KEY_REFRESH_TOKEN, "");
   tokenExpires = preferences.getULong64(KEY_TOKEN_EXPIRES, 0);
+  
+  // Load device code flow data if present
+  deviceCode = preferences.getString(KEY_DEVICE_CODE, "");
+  userCode = preferences.getString(KEY_USER_CODE, "");
+  verificationUri = preferences.getString(KEY_VERIFICATION_URI, "");
+  deviceCodeExpires = preferences.getULong64(KEY_DEVICE_CODE_EXPIRES, 0);
   
 #if ENABLE_HTTPS
   // Load SSL configuration - HTTPS is always enabled
