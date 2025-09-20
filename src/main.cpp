@@ -1517,7 +1517,7 @@ void handleCallback() {
       String payload = http.getString();
       LOG_DEBUGF("Token response payload length: %d", payload.length());
       
-      DynamicJsonDocument doc(2048);
+      DynamicJsonDocument doc(4096);
       DeserializationError error = deserializeJson(doc, payload);
       
       if (error) {
@@ -1680,7 +1680,7 @@ bool pollDeviceCodeToken() {
     String payload = http.getString();
     LOG_DEBUGF("Token response payload length: %d", payload.length());
     
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(4096);
     DeserializationError error = deserializeJson(doc, payload);
     
     if (error) {
@@ -1793,7 +1793,7 @@ bool pollDeviceCodeTokenWithSecret() {
     String payload = http.getString();
     LOG_DEBUGF("Token response payload length: %d", payload.length());
     
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(4096);
     DeserializationError error = deserializeJson(doc, payload);
     
     if (error) {
@@ -1993,7 +1993,7 @@ bool refreshAccessToken() {
     String payload = http.getString();
     LOG_DEBUGF("Token refresh response length: %d", payload.length());
     
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(4096);
     DeserializationError error = deserializeJson(doc, payload);
     
     if (error) {
