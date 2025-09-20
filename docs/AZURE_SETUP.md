@@ -37,7 +37,18 @@ This guide will walk you through setting up an Azure AD application for the Team
 
 4. Click **Register**
 
-### 3. Configure API Permissions
+### 3. Enable Public Client Flows (Recommended)
+
+For optimal device code flow compatibility, configure the app as a public client:
+
+1. In your newly created app, go to **Authentication**
+2. Scroll down to **Advanced settings**
+3. Under **Allow public client flows**, toggle **"Enable the following mobile and desktop flows"** to **Yes**
+4. Click **Save**
+
+> **Note:** This setting allows the device code flow to work without requiring client secrets, which is more secure for IoT devices like the ESP32. If your organization requires confidential client configuration, the firmware will automatically detect this and use client secrets when available.
+
+### 4. Configure API Permissions
 
 1. In your newly created app, go to **API permissions**
 2. Click **Add a permission**
@@ -50,7 +61,7 @@ This guide will walk you through setting up an Azure AD application for the Team
 7. Click **Grant admin consent for [Your Organization]**
 8. Confirm by clicking **Yes**
 
-### 4. Create Client Secret
+### 5. Create Client Secret
 
 1. Go to **Certificates & secrets**
 2. Click **New client secret**
@@ -59,9 +70,9 @@ This guide will walk you through setting up an Azure AD application for the Team
 5. Click **Add**
 6. **Copy the secret value immediately** - you won't be able to see it again!
 
-> **Note:** The device code authentication flow works as a **public client** and doesn't require the client secret for initial authentication. The client secret is used for token refresh operations to maintain the session.
+> **Note:** If you enabled "Allow public client flows" in step 3, the client secret is optional for device code authentication. However, it's still recommended to create one for token refresh operations and compatibility with confidential client configurations.
 
-### 5. Note Important Values
+### 6. Note Important Values
 
 Copy these values for ESP32 configuration:
 
@@ -69,9 +80,9 @@ Copy these values for ESP32 configuration:
 |-------|---------------|---------|
 | **Client ID** | Overview page → Application (client) ID | `12345678-1234-1234-1234-123456789012` |
 | **Tenant ID** | Overview page → Directory (tenant) ID | `87654321-4321-4321-4321-210987654321` |
-| **Client Secret** | The value you copied in step 4 | `abc123def456...` |
+| **Client Secret** | The value you copied in step 5 | `abc123def456...` |
 
-### 6. Device Code Authentication (New Method)
+### 7. Device Code Authentication (Current Method)
 
 After you've configured your ESP32:
 
