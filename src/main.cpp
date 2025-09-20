@@ -412,65 +412,104 @@ void setupWebServer() {
 
 void handleRoot() {
   String html = "<!DOCTYPE html>";
-  html += "<html>";
+  html += "<html lang=\"en\">";
   html += "<head>";
-  html += "<title>Teams Red Light</title>";
   html += "<meta charset=\"UTF-8\">";
   html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+  html += "<title>Teams Red Light</title>";
   html += "<style>";
-  html += "body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }";
-  html += ".container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }";
-  html += "h1 { color: #d73502; text-align: center; }";
-  html += ".status { padding: 15px; margin: 10px 0; border-radius: 5px; text-align: center; font-weight: bold; }";
-  html += ".status.connected { background-color: #d4edda; color: #155724; }";
-  html += ".status.disconnected { background-color: #f8d7da; color: #721c24; }";
-  html += ".status.configuring { background-color: #fff3cd; color: #856404; }";
-  html += "button { background-color: #d73502; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }";
-  html += "button:hover { background-color: #b12d02; }";
-  html += ".form-group { margin: 15px 0; }";
-  html += "label { display: block; margin-bottom: 5px; font-weight: bold; }";
-  html += "input[type=\"text\"], input[type=\"password\"], input[type=\"email\"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }";
+  html += "* { margin: 0; padding: 0; box-sizing: border-box; }";
+  html += "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 1rem; display: flex; align-items: center; justify-content: center; }";
+  html += ".container { background: white; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); width: 100%; max-width: 500px; overflow: hidden; }";
+  html += ".header { background: linear-gradient(135deg, #d73502, #b12d02); color: white; padding: 2rem; text-align: center; }";
+  html += ".header h1 { font-size: 1.8rem; font-weight: 600; margin-bottom: 0.5rem; }";
+  html += ".content { padding: 2rem; }";
+  html += ".status-card { background: #f8f9fa; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; text-align: center; border-left: 4px solid #6c757d; transition: all 0.3s ease; }";
+  html += ".status-card.connected { border-left-color: #28a745; background: #d4edda; color: #155724; }";
+  html += ".status-card.disconnected { border-left-color: #dc3545; background: #f8d7da; color: #721c24; }";
+  html += ".status-card.configuring { border-left-color: #ffc107; background: #fff3cd; color: #856404; }";
+  html += ".status-icon { font-size: 2rem; margin-bottom: 0.5rem; display: block; }";
+  html += ".status-text { font-weight: 600; font-size: 1.1rem; margin-bottom: 0.5rem; }";
+  html += ".status-detail { font-size: 0.9rem; opacity: 0.8; }";
+  html += ".actions { display: grid; gap: 0.75rem; margin-top: 1.5rem; }";
+  html += ".btn { background: #d73502; color: white; border: none; padding: 0.75rem 1rem; border-radius: 6px; font-size: 1rem; cursor: pointer; transition: all 0.2s ease; text-decoration: none; display: inline-block; text-align: center; }";
+  html += ".btn:hover { background: #b12d02; transform: translateY(-1px); }";
+  html += ".btn-secondary { background: #6c757d; } .btn-secondary:hover { background: #5a6268; }";
+  html += ".btn-danger { background: #dc3545; } .btn-danger:hover { background: #c82333; }";
+  html += ".device-info { background: #f8f9fa; border-radius: 6px; padding: 1rem; margin-top: 1rem; font-size: 0.9rem; color: #6c757d; }";
+  html += ".device-info div { margin-bottom: 0.25rem; }";
+  html += "@media (max-width: 768px) { body { padding: 0.5rem; } .header { padding: 1.5rem; } .content { padding: 1.5rem; } }";
   html += "</style>";
   html += "</head>";
   html += "<body>";
   html += "<div class=\"container\">";
-  html += "<h1>🔴 Teams Red Light</h1>";
-  html += "<div id=\"status\" class=\"status configuring\">Loading status...</div>";
-  html += "<div id=\"configSection\">";
-  html += "<h3>Configuration</h3>";
-  html += "<button onclick=\"window.location.href='/config'\">Configure Device</button>";
-  html += "<button onclick=\"checkStatus()\">Refresh Status</button>";
-  html += "<button onclick=\"restartDevice()\">Restart Device</button>";
+  html += "<div class=\"header\">";
+  html += "<h1>&#x1F534; Teams Red Light</h1>";
+  html += "<p>Device Control Panel</p>";
+  html += "</div>";
+  html += "<div class=\"content\">";
+  html += "<div id=\"status\" class=\"status-card configuring\">";
+  html += "<span class=\"status-icon\">&#x23F3;</span>";
+  html += "<div class=\"status-text\">Loading Status...</div>";
+  html += "<div class=\"status-detail\">Please wait while we check the device status</div>";
+  html += "</div>";
+  html += "<div class=\"actions\">";
+  html += "<button class=\"btn\" onclick=\"window.location.href='/config'\">&#x2699;&#xFE0F; Configure Device</button>";
+  html += "<button class=\"btn btn-secondary\" onclick=\"checkStatus()\">&#x1F504; Refresh Status</button>";
+  html += "<button class=\"btn btn-danger\" onclick=\"restartDevice()\">&#x1F50C; Restart Device</button>";
+  html += "</div>";
+  html += "<div class=\"device-info\" id=\"deviceInfo\" style=\"display: none;\">";
+  html += "<div><strong>Device Information:</strong></div>";
+  html += "<div id=\"ipAddress\"></div>";
+  html += "<div id=\"uptime\"></div>";
+  html += "<div id=\"wifiStatus\"></div>";
+  html += "</div>";
   html += "</div>";
   html += "</div>";
   html += "<script>";
   html += "function checkStatus() {";
   html += "fetch('/status').then(response => response.json()).then(data => {";
   html += "const statusDiv = document.getElementById('status');";
+  html += "const deviceInfo = document.getElementById('deviceInfo');";
   html += "if (data.state === 'monitoring') {";
-  html += "statusDiv.className = 'status connected';";
-  html += "statusDiv.innerHTML = 'Connected - Presence: ' + data.presence;";
+  html += "statusDiv.className = 'status-card connected';";
+  html += "statusDiv.innerHTML = '<span class=\"status-icon\">&#x2705;</span><div class=\"status-text\">Connected & Monitoring</div><div class=\"status-detail\">Teams presence: ' + (data.presence || 'Unknown') + '</div>';";
   html += "} else if (data.state === 'ap_mode') {";
-  html += "statusDiv.className = 'status configuring';";
-  html += "statusDiv.innerHTML = 'Configuration Mode - Please configure WiFi and Teams settings';";
+  html += "statusDiv.className = 'status-card configuring';";
+  html += "statusDiv.innerHTML = '<span class=\"status-icon\">&#x2699;&#xFE0F;</span><div class=\"status-text\">Configuration Mode</div><div class=\"status-detail\">Please configure WiFi and Teams settings</div>';";
+  html += "} else if (data.state === 'connecting_wifi') {";
+  html += "statusDiv.className = 'status-card configuring';";
+  html += "statusDiv.innerHTML = '<span class=\"status-icon\">&#x1F4F6;</span><div class=\"status-text\">Connecting to WiFi</div><div class=\"status-detail\">Establishing network connection...</div>';";
+  html += "} else if (data.state === 'connecting_oauth' || data.state === 'device_code_pending') {";
+  html += "statusDiv.className = 'status-card configuring';";
+  html += "statusDiv.innerHTML = '<span class=\"status-icon\">&#x1F510;</span><div class=\"status-text\">Waiting for Authentication</div><div class=\"status-detail\">Complete Microsoft Teams authentication</div>';";
   html += "} else {";
-  html += "statusDiv.className = 'status disconnected';";
-  html += "statusDiv.innerHTML = 'Status: ' + (data.message || 'Not connected');";
+  html += "statusDiv.className = 'status-card disconnected';";
+  html += "statusDiv.innerHTML = '<span class=\"status-icon\">&#x274C;</span><div class=\"status-text\">Disconnected</div><div class=\"status-detail\">' + (data.message || 'Not connected') + '</div>';";
+  html += "}";
+  html += "if (data.ip_address || data.uptime || data.wifi_connected !== undefined) {";
+  html += "deviceInfo.style.display = 'block';";
+  html += "document.getElementById('ipAddress').textContent = data.ip_address ? 'IP Address: ' + data.ip_address : '';";
+  html += "document.getElementById('uptime').textContent = data.uptime ? 'Uptime: ' + Math.floor(data.uptime / 60) + ' minutes' : '';";
+  html += "document.getElementById('wifiStatus').textContent = data.wifi_connected !== undefined ? 'WiFi: ' + (data.wifi_connected ? 'Connected' : 'Disconnected') : '';";
   html += "}";
   html += "}).catch(() => {";
-  html += "document.getElementById('status').innerHTML = 'Unable to get status';";
+  html += "const statusDiv = document.getElementById('status');";
+  html += "statusDiv.className = 'status-card disconnected';";
+  html += "statusDiv.innerHTML = '<span class=\"status-icon\">&#x26A0;&#xFE0F;</span><div class=\"status-text\">Connection Error</div><div class=\"status-detail\">Unable to get device status</div>';";
   html += "});";
   html += "}";
   html += "function restartDevice() {";
-  html += "if (confirm('Are you sure you want to restart the device?')) {";
+  html += "if (confirm('Are you sure you want to restart the device? This will temporarily interrupt monitoring.')) {";
   html += "fetch('/restart', { method: 'POST' }).then(() => {";
-  html += "alert('Device is restarting...');";
-  html += "setTimeout(() => location.reload(), 5000);";
-  html += "});";
+  html += "const statusDiv = document.getElementById('status');";
+  html += "statusDiv.className = 'status-card configuring';";
+  html += "statusDiv.innerHTML = '<span class=\"status-icon\">&#x1F504;</span><div class=\"status-text\">Restarting Device</div><div class=\"status-detail\">Please wait 30 seconds...</div>';";
+  html += "setTimeout(() => location.reload(), 30000);";
+  html += "}).catch(() => { alert('Failed to restart device. Please try again.'); });";
   html += "}";
   html += "}";
-  html += "checkStatus();";
-  html += "setInterval(checkStatus, 10000);";
+  html += "checkStatus(); setInterval(checkStatus, 10000);";
   html += "</script>";
   html += "</body>";
   html += "</html>";
@@ -479,107 +518,126 @@ void handleRoot() {
 }
 
 void handleConfig() {
-  String html = R"(
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Teams Red Light - Configuration</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #d73502; text-align: center; }
-        .form-group { margin: 15px 0; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="text"], input[type="password"], input[type="email"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { background-color: #d73502; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
-        button:hover { background-color: #b12d02; }
-        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
-        .help { font-size: 0.9em; color: #666; margin-top: 5px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🔴 Teams Red Light Configuration</h1>
-        
-        <form action="/save" method="POST">
-            <div class="section">
-                <h3>WiFi Settings</h3>
-                <div class="form-group">
-                    <label for="wifi_ssid">WiFi Network Name (SSID):</label>
-                    <input type="text" id="wifi_ssid" name="wifi_ssid" value=")" + wifiSSID + R"(" required>
-                </div>
-                <div class="form-group">
-                    <label for="wifi_password">WiFi Password:</label>
-                    <input type="password" id="wifi_password" name="wifi_password" value="">
-                    <div class="help">Leave blank to keep current password</div>
-                </div>
-            </div>
-            
-            <div class="section">
-                <h3>Microsoft Teams/Office 365 Settings</h3>
-                <div class="form-group">
-                    <label for="user_email">Your Email Address:</label>
-                    <input type="email" id="user_email" name="user_email" value=")" + userEmail + R"(" required>
-                    <div class="help">The email address for your Teams account</div>
-                </div>
-                <div class="form-group">
-                    <label for="tenant_id">Tenant ID:</label>
-                    <input type="text" id="tenant_id" name="tenant_id" value=")" + tenantId + R"(">
-                    <div class="help">Your Office 365 tenant ID (optional, can be 'common' for personal accounts)</div>
-                </div>
-                <div class="form-group">
-                    <label for="client_id">Client ID:</label>
-                    <input type="text" id="client_id" name="client_id" value=")" + clientId + R"(" required>
-                    <div class="help">Azure AD Application Client ID</div>
-                </div>
-                <div class="form-group">
-                    <label for="client_secret">Client Secret:</label>
-                    <input type="password" id="client_secret" name="client_secret" value="">
-                    <div class="help">Azure AD Application Client Secret (leave blank to keep current)</div>
-                </div>
-            </div>
-            
-            <div class="section">
-                <h3>Firmware Update</h3>
-                <div class="form-group">
-                    <label for="ota_url">OTA Update URL:</label>
-                    <input type="text" id="ota_url" name="ota_url" value=")" + preferences.getString(OTA_UPDATE_URL_KEY, DEFAULT_OTA_URL) + R"(">
-                    <div class="help">URL for firmware updates</div>
-                </div>
-            </div>
-            
-            <button type="submit">Save Configuration</button>
-            <button type="button" onclick="window.location.href='/'">Back to Home</button>
-        </form>
-        
-        <div class="section">
-            <h3>OAuth Authentication</h3>
-            <p>After saving your configuration, you'll need to authenticate with Microsoft to allow access to your Teams presence.</p>
-            <button type="button" onclick="window.location.href='/login'">Authenticate with Microsoft</button>
-        </div>
-        
-        <div class="section">
-            <h3>Setup Instructions</h3>
-            <ol>
-                <li>Register an application in Azure AD with the following permissions: <code>Presence.Read</code></li>
-                <li><strong>No redirect URI needed!</strong> Device Code Flow eliminates SSL requirements</li>
-                <li>Enter your application credentials above</li>
-                <li>Save the configuration</li>
-                <li>Click "Authenticate with Microsoft" - you'll get a code to enter on your phone/computer</li>
-            </ol>
-            <div style="background: #e8f5e8; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                <strong>✅ Improved Security:</strong> This device now uses Device Code Flow, which eliminates the need for redirect URLs and SSL certificates while maintaining full security.
-            </div>
-        </div>
-    </div>
-</body>
-</html>
-  )";
+  String html = "<!DOCTYPE html>";
+  html += "<html lang=\"en\">";
+  html += "<head>";
+  html += "<meta charset=\"UTF-8\">";
+  html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+  html += "<title>Teams Red Light - Configuration</title>";
+  html += "<style>";
+  html += "* { margin: 0; padding: 0; box-sizing: border-box; }";
+  html += "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 1rem; }";
+  html += ".container { background: white; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); width: 100%; max-width: 700px; margin: 0 auto; overflow: hidden; }";
+  html += ".header { background: linear-gradient(135deg, #d73502, #b12d02); color: white; padding: 2rem; text-align: center; }";
+  html += ".header h1 { font-size: 1.8rem; font-weight: 600; margin-bottom: 0.5rem; }";
+  html += ".content { padding: 2rem; }";
+  html += ".section { background: #f8f9fa; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; border-left: 4px solid #d73502; }";
+  html += ".section h3 { color: #d73502; margin-bottom: 1rem; font-size: 1.2rem; }";
+  html += ".form-group { margin-bottom: 1rem; }";
+  html += "label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333; }";
+  html += "input[type=\"text\"], input[type=\"password\"], input[type=\"email\"] { width: 100%; padding: 0.75rem; border: 2px solid #e9ecef; border-radius: 6px; font-size: 1rem; transition: border-color 0.2s ease; }";
+  html += "input:focus { outline: none; border-color: #d73502; }";
+  html += ".help { font-size: 0.875rem; color: #6c757d; margin-top: 0.25rem; }";
+  html += ".actions { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 2rem; }";
+  html += ".btn { background: #d73502; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; font-size: 1rem; cursor: pointer; transition: all 0.2s ease; text-decoration: none; text-align: center; display: inline-block; }";
+  html += ".btn:hover { background: #b12d02; transform: translateY(-1px); }";
+  html += ".btn-secondary { background: #6c757d; color: white; } .btn-secondary:hover { background: #5a6268; }";
+  html += ".btn-auth { background: #0078d4; margin-top: 1rem; width: 100%; } .btn-auth:hover { background: #106ebe; }";
+  html += ".info-box { background: #e8f4fd; border: 1px solid #bee5eb; border-radius: 6px; padding: 1rem; margin-top: 1rem; }";
+  html += ".info-box h4 { color: #0c5460; margin-bottom: 0.5rem; }";
+  html += ".info-box ol { margin-left: 1.5rem; color: #0c5460; }";
+  html += ".info-box li { margin-bottom: 0.5rem; }";
+  html += "@media (max-width: 768px) { body { padding: 0.5rem; } .header { padding: 1.5rem; } .content { padding: 1.5rem; } .actions { grid-template-columns: 1fr; } }";
+  html += "</style>";
+  html += "</head>";
+  html += "<body>";
+  html += "<div class=\"container\">";
+  html += "<div class=\"header\">";
+  html += "<h1>&#x2699;&#xFE0F; Device Configuration</h1>";
+  html += "<p>Configure your Teams Red Light device</p>";
+  html += "</div>";
+  html += "<div class=\"content\">";
+  html += "<form action=\"/save\" method=\"POST\">";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F4F6; WiFi Connection</h3>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"wifi_ssid\">Network Name (SSID)</label>";
+  html += "<input type=\"text\" id=\"wifi_ssid\" name=\"wifi_ssid\" value=\"" + wifiSSID + "\" required placeholder=\"Enter your WiFi network name\">";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"wifi_password\">WiFi Password</label>";
+  html += "<input type=\"password\" id=\"wifi_password\" name=\"wifi_password\" value=\"\" placeholder=\"Enter WiFi password\">";
+  html += "<div class=\"help\">&#x1F4A1; Leave blank to keep current password</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F510; Microsoft Teams Integration</h3>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"user_email\">Your Email Address</label>";
+  html += "<input type=\"email\" id=\"user_email\" name=\"user_email\" value=\"" + userEmail + "\" required placeholder=\"your.name@company.com\">";
+  html += "<div class=\"help\">&#x1F4E7; The email address for your Teams account</div>";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"tenant_id\">Tenant ID (Optional)</label>";
+  html += "<input type=\"text\" id=\"tenant_id\" name=\"tenant_id\" value=\"" + tenantId + "\" placeholder=\"common\">";
+  html += "<div class=\"help\">&#x1F3E2; Your Office 365 tenant ID (use 'common' for personal accounts)</div>";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"client_id\">Application Client ID</label>";
+  html += "<input type=\"text\" id=\"client_id\" name=\"client_id\" value=\"" + clientId + "\" required placeholder=\"12345678-1234-1234-1234-123456789012\">";
+  html += "<div class=\"help\">&#x1F194; Azure AD Application Client ID</div>";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"client_secret\">Application Client Secret</label>";
+  html += "<input type=\"password\" id=\"client_secret\" name=\"client_secret\" value=\"\" placeholder=\"Enter client secret\">";
+  html += "<div class=\"help\">&#x1F511; Azure AD Application Client Secret (leave blank to keep current)</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F504; Firmware Updates</h3>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"ota_url\">Update URL</label>";
+  html += "<input type=\"text\" id=\"ota_url\" name=\"ota_url\" value=\"" + preferences.getString(OTA_UPDATE_URL_KEY, DEFAULT_OTA_URL) + "\" placeholder=\"https://github.com/...\">";
+  html += "<div class=\"help\">&#x1F310; URL for over-the-air firmware updates</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "<div class=\"actions\">";
+  html += "<button type=\"submit\" class=\"btn\">&#x1F4BE; Save Configuration</button>";
+  html += "<button type=\"button\" class=\"btn btn-secondary\" onclick=\"window.location.href='/'\">&#x2190; Back to Home</button>";
+  html += "</div>";
+  html += "</form>";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F510; Microsoft Authentication</h3>";
+  html += "<p>After saving your configuration, authenticate with Microsoft to enable Teams presence monitoring.</p>";
+  html += "<button type=\"button\" class=\"btn btn-auth\" onclick=\"window.location.href='/login'\">&#x1F680; Authenticate with Microsoft</button>";
+  html += "<div class=\"info-box\">";
+  html += "<h4>&#x2705; Secure Device Code Flow</h4>";
+  html += "<p>This device uses Microsoft's secure Device Code Flow - no redirect URLs or SSL certificates needed!</p>";
+  html += "</div>";
+  html += "</div>";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F4CB; Setup Guide</h3>";
+  html += "<div class=\"info-box\">";
+  html += "<h4>Azure AD Application Setup:</h4>";
+  html += "<ol>";
+  html += "<li>Go to <strong>Azure Portal</strong> &#x2192; Azure Active Directory &#x2192; App registrations</li>";
+  html += "<li>Click <strong>\"New registration\"</strong></li>";
+  html += "<li>Enter name: <strong>\"Teams Red Light\"</strong></li>";
+  html += "<li>Leave redirect URI <strong>blank</strong> (not needed!)</li>";
+  html += "<li>Add API permission: <strong>Microsoft Graph &#x2192; Presence.Read</strong></li>";
+  html += "<li>Create a <strong>client secret</strong></li>";
+  html += "<li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> above</li>";
+  html += "</ol>";
+  html += "</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "</body>";
+  html += "</html>";
   
   server.send(200, "text/html", html);
 }
+
 
 void handleSave() {
   LOG_INFO("Processing configuration save request");
