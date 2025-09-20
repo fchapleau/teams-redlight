@@ -1571,7 +1571,7 @@ bool pollDeviceCodeToken() {
   int httpCode = http.POST(postData);
   LOG_DEBUGF("Token poll response: HTTP %d", httpCode);
   
-  if (httpCode == HTTP_CODE_OK) {
+  if (httpCode == HTTP_CODE_OK || httpCode == 400 || httpCode == 401) {
     String payload = http.getString();
     LOG_DEBUGF("Token response payload length: %d", payload.length());
     

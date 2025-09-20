@@ -79,7 +79,7 @@ void test_led_pattern_enum() {
     
     // Test default patterns
     TEST_ASSERT_EQUAL(PATTERN_SOLID, DEFAULT_MEETING_PATTERN);
-    TEST_ASSERT_EQUAL(PATTERN_OFF, DEFAULT_NO_MEETING_PATTERN);
+    TEST_ASSERT_EQUAL(PATTERN_OFF, DEFAULT_AVAILABLE_PATTERN);
 }
 
 void test_led_pattern_intervals() {
