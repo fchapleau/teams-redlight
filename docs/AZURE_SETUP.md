@@ -59,6 +59,8 @@ This guide will walk you through setting up an Azure AD application for the Team
 5. Click **Add**
 6. **Copy the secret value immediately** - you won't be able to see it again!
 
+> **Note:** The device code authentication flow works as a **public client** and doesn't require the client secret for initial authentication. The client secret is used for token refresh operations to maintain the session.
+
 ### 5. Note Important Values
 
 Copy these values for ESP32 configuration:
@@ -87,6 +89,7 @@ After you've configured your ESP32:
 - ✅ More secure (authentication happens on Microsoft's servers)
 - ✅ Works from any device with internet access
 - ✅ Ideal for IoT devices like ESP32
+- ✅ Uses public client authentication (client secret not required for initial auth)
 
 ## Security Best Practices
 
