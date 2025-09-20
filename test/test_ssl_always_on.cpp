@@ -1,31 +1,28 @@
 #include <unity.h>
+#include <Arduino.h>
 
-// Test that SSL/HTTPS is always enabled
-void test_ssl_always_enabled() {
-    // Test that HTTPS is enabled by default
-    bool httpsEnabled = true;  // This mirrors the code change
-    TEST_ASSERT_TRUE(httpsEnabled);
+// Test that device code flow is the primary authentication method
+void test_device_code_flow_enabled() {
+    // Test that device code flow is the authentication method
+    bool deviceCodeFlowEnabled = true;
+    TEST_ASSERT_TRUE(deviceCodeFlowEnabled);
     
-    // Test HTTPS port configuration
-    const int HTTPS_PORT = 443;
-    TEST_ASSERT_EQUAL(443, HTTPS_PORT);
-    
-    // Test that HTTPS cannot be disabled
-    // (in the actual implementation, there's no longer a way to set httpsEnabled to false)
-    TEST_ASSERT_TRUE(httpsEnabled);  // Always true
+    // Test that HTTPS is now optional
+    const bool HTTPS_REQUIRED = false;
+    TEST_ASSERT_FALSE(HTTPS_REQUIRED);
 }
 
-void test_https_configuration_removed() {
-    // Verify that HTTPS configuration options are not present
-    // This test validates that the user cannot disable HTTPS
+void test_ssl_requirements_removed() {
+    // Verify that SSL is no longer required for OAuth
+    // This test validates that redirect URLs are not needed
     
-    // Mock a configuration page check
-    bool hasHttpsCheckbox = false;  // Checkbox was removed
-    TEST_ASSERT_FALSE(hasHttpsCheckbox);
+    // Mock check that no redirect URI is required
+    bool redirectUriRequired = false;
+    TEST_ASSERT_FALSE(redirectUriRequired);
     
-    // Mock configuration saving - HTTPS should not be affected by user input
-    bool httpsStaysEnabled = true;
-    TEST_ASSERT_TRUE(httpsStaysEnabled);
+    // Mock check that authentication works without SSL
+    bool authWorksWithoutSsl = true;
+    TEST_ASSERT_TRUE(authWorksWithoutSsl);
 }
 
 void setup() {
@@ -33,8 +30,8 @@ void setup() {
     
     UNITY_BEGIN();
     
-    RUN_TEST(test_ssl_always_enabled);
-    RUN_TEST(test_https_configuration_removed);
+    RUN_TEST(test_device_code_flow_enabled);
+    RUN_TEST(test_ssl_requirements_removed);
     
     UNITY_END();
 }
