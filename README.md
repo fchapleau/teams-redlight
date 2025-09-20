@@ -69,7 +69,7 @@ ESP32 Development Board
 
 1. **Power on the ESP32** - The LED will blink very fast indicating configuration mode
 2. **Connect to WiFi network** named "Teams Red Light" (password: "configure")
-3. **Open browser** and go to http://192.168.4.1 or https://192.168.4.1 (secure access is always available)
+3. **Open browser** and go to http://192.168.4.1 (HTTPS no longer required for setup!)
 4. **Configure your settings:**
    - WiFi network credentials
    - Microsoft Teams/Office 365 settings
@@ -85,7 +85,7 @@ Before configuring the device, you need to register an application in Azure AD:
 4. **Enter** application details:
    - Name: "Teams Red Light"
    - Supported account types: Choose based on your organization
-   - Redirect URI: `http://[your-esp32-ip]/callback` (you'll update this later)
+   - Redirect URI: **Not required!** (leave empty or use placeholder like `https://example.com`)
 
 5. **Configure API permissions:**
    - Add permission: Microsoft Graph → Delegated permissions
@@ -228,27 +228,32 @@ pio test
 - **Client secrets** are stored securely in ESP32 flash memory
 - **Access tokens** are refreshed automatically
 - **Network traffic** uses HTTPS for Microsoft Graph API
-- **Local web interface** supports both HTTP and HTTPS
-- **HTTPS always enabled** with self-signed certificates for secure local access
+- **Device Code Flow** eliminates need for SSL certificates on ESP32
+- **Secure authentication** via Microsoft's servers (no local SSL required)
 
-### HTTPS Configuration
+### Authentication Security (Device Code Flow)
 
-The device automatically provides secure HTTPS access alongside the standard HTTP interface:
+The device uses Microsoft's Device Code Flow for secure authentication:
 
-- **HTTP**: Port 80 (always available for compatibility)
-- **HTTPS**: Port 443 (always enabled for security)
-- **Self-signed certificates**: Automatically generated and stored in flash
-- **Security**: HTTPS protects configuration data in transit on your local network
+- **No SSL certificates required** on the ESP32 device
+- **No redirect URIs needed** - eliminates SSL complexity
+- **Secure by design**: Authentication happens on Microsoft's HTTPS servers
+- **IoT-optimized**: Designed specifically for resource-constrained devices
+- **User-friendly**: Enter code on any internet-connected device
 
-HTTPS is always enabled and cannot be disabled. The device will:
-1. Automatically generate self-signed certificates on first boot
-2. Start the HTTPS server on port 443
-3. Accept secure connections at `https://[device-ip]` (you may need to accept the self-signed certificate)
+**Authentication Process:**
+1. Device displays a user code and verification URL
+2. User visits verification URL on phone/computer
+3. User enters the device code and signs in with Microsoft
+4. Device automatically receives secure access tokens
+5. No local SSL certificates or complex network configuration needed
 
-For production use, consider:
-- Using certificate-based authentication instead of client secrets
-- Installing proper SSL certificates from a trusted CA
-- Regular firmware updates for security patches
+**Benefits over traditional OAuth:**
+- ✅ No SSL certificate management
+- ✅ No redirect URI configuration 
+- ✅ No network firewall issues
+- ✅ Works from any device with internet access
+- ✅ More secure (authentication on Microsoft's servers)
 
 ## License
 

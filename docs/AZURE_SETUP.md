@@ -30,10 +30,10 @@ This guide will walk you through setting up an Azure AD application for the Team
    - **Personal accounts**: Include personal Microsoft accounts
    
    **Redirect URI:**
-   - Platform: Web
-   - URI: `http://192.168.4.1/callback` (default ESP32 AP IP)
+   - **Not required!** Device Code Flow eliminates the need for redirect URIs
+   - This means no SSL certificates are required on the ESP32
    
-   > Note: You'll update this with your actual ESP32 IP after configuration
+   > Note: You can leave the redirect URI field empty or use a placeholder like `https://example.com`
 
 4. Click **Register**
 
@@ -69,15 +69,24 @@ Copy these values for ESP32 configuration:
 | **Tenant ID** | Overview page → Directory (tenant) ID | `87654321-4321-4321-4321-210987654321` |
 | **Client Secret** | The value you copied in step 4 | `abc123def456...` |
 
-### 6. Update Redirect URI (After ESP32 Setup)
+### 6. Device Code Authentication (New Method)
 
-After you've configured your ESP32 and it's connected to your WiFi:
+After you've configured your ESP32:
 
-1. Find your ESP32's IP address (shown in web interface)
-2. Go back to your Azure AD app registration
-3. Go to **Authentication**
-4. Update the redirect URI to: `http://[ESP32-IP]/callback`
-5. For example: `http://192.168.1.100/callback`
+1. Connect to your ESP32's web interface
+2. Click **"Authenticate with Microsoft"**
+3. You'll see a **device code** and **verification URL**
+4. On your phone or computer, visit the verification URL
+5. Enter the device code shown on the ESP32
+6. Sign in with your Microsoft Teams account
+7. The ESP32 will automatically detect successful authentication
+
+**Benefits of Device Code Flow:**
+- ✅ No redirect URIs needed
+- ✅ No SSL certificates required on ESP32  
+- ✅ More secure (authentication happens on Microsoft's servers)
+- ✅ Works from any device with internet access
+- ✅ Ideal for IoT devices like ESP32
 
 ## Security Best Practices
 
@@ -130,11 +139,13 @@ After you've configured your ESP32 and it's connected to your WiFi:
 2. Check if admin consent is required for your organization
 3. Verify the user account has Teams enabled
 
-### Invalid Redirect URI
+### Invalid Redirect URI (Legacy Issue - Now Resolved)
 
 **Problem:** OAuth flow fails with redirect URI mismatch
 
-**Solutions:**
+**Solution:** This issue is now resolved with Device Code Flow! No redirect URIs are needed.
+
+**For Legacy Firmware:** If using older firmware:
 1. Ensure redirect URI in Azure matches ESP32 IP exactly
 2. Check that ESP32 is accessible at the configured IP
 3. Try using `http://` instead of `https://` for local network
@@ -159,10 +170,11 @@ After you've configured your ESP32 and it's connected to your WiFi:
 
 ## Testing Your Configuration
 
-### 1. Quick Test in Browser
+### 1. Quick Test in Browser (Legacy Method)
 
-Before configuring ESP32, test your Azure AD app:
+**Note:** With the new Device Code Flow, this browser test is no longer needed. The ESP32 will provide you with a device code and verification URL directly.
 
+For reference with older firmware versions:
 1. Create test URL:
    ```
    https://login.microsoftonline.com/[TENANT-ID]/oauth2/v2.0/authorize?client_id=[CLIENT-ID]&response_type=code&redirect_uri=http://localhost&scope=https://graph.microsoft.com/Presence.Read
@@ -206,12 +218,22 @@ Consider your organization's compliance needs:
 
 ## Alternative Authentication Methods
 
-### Device Code Flow (Future Enhancement)
+### Device Code Flow (Current Implementation)
 
-For environments where web browser access is limited:
-- Device displays code on screen
-- User enters code on separate device
-- More secure for public environments
+The current firmware uses Microsoft's Device Code Flow for authentication:
+- Device displays code on screen or web interface
+- User enters code on separate device at Microsoft's verification URL
+- More secure for IoT environments
+- No redirect URIs required
+- Works from any internet-connected device
+
+### Authorization Code Flow (Legacy)
+
+Previous firmware versions used authorization code flow:
+- Required redirect URIs pointing to ESP32
+- Needed SSL certificates for security
+- Direct browser redirects to ESP32
+- **Deprecated:** Replaced by Device Code Flow for better security
 
 ### Certificate-Based Authentication
 
