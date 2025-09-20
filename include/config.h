@@ -57,8 +57,9 @@
 #define KEY_NO_MEETING_PATTERN "no_meeting_pattern"
 #define KEY_LED_COUNT "led_count"
 #define KEY_LED_PIN_PREFIX "led_pin_"
+#define KEY_LED_CALL_PATTERN_PREFIX "led_call_"
 #define KEY_LED_MEETING_PATTERN_PREFIX "led_meet_"
-#define KEY_LED_NO_MEETING_PATTERN_PREFIX "led_avail_"
+#define KEY_LED_AVAILABLE_PATTERN_PREFIX "led_avail_"
 
 // Update Configuration
 #define OTA_UPDATE_URL_KEY "ota_url"
@@ -76,8 +77,9 @@ enum LEDPattern {
 };
 
 // Default LED patterns
+#define DEFAULT_CALL_PATTERN PATTERN_FAST_BLINK
 #define DEFAULT_MEETING_PATTERN PATTERN_SOLID
-#define DEFAULT_NO_MEETING_PATTERN PATTERN_OFF
+#define DEFAULT_AVAILABLE_PATTERN PATTERN_OFF
 
 // LED Pattern Intervals
 #define LED_PATTERN_SLOW_BLINK_INTERVAL 1000     // 1 second
@@ -110,8 +112,9 @@ enum TeamsPresence {
 // LED Configuration Structure
 struct LEDConfig {
   uint8_t pin;
+  LEDPattern callPattern;
   LEDPattern meetingPattern;
-  LEDPattern noMeetingPattern;
+  LEDPattern availablePattern;
   bool enabled;
   // Pattern state variables
   unsigned long lastToggle;

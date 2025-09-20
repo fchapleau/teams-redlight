@@ -23,8 +23,9 @@ unsigned long lastPresenceCheck = 0;
 unsigned long tokenExpires = 0;
 
 // LED Pattern state
+LEDPattern callPattern = DEFAULT_CALL_PATTERN;
 LEDPattern meetingPattern = DEFAULT_MEETING_PATTERN;
-LEDPattern noMeetingPattern = DEFAULT_NO_MEETING_PATTERN;
+LEDPattern availablePattern = DEFAULT_AVAILABLE_PATTERN;
 unsigned long doubleBlinksStartTime = 0;
 bool doubleBlinksState = false;
 int doubleBlinksCount = 0;
@@ -190,8 +191,9 @@ void initDefaultLEDs() {
   if (ledCount == 0) {
     ledCount = 1;
     leds[0].pin = LED_PIN;
+    leds[0].callPattern = DEFAULT_CALL_PATTERN;
     leds[0].meetingPattern = DEFAULT_MEETING_PATTERN;
-    leds[0].noMeetingPattern = DEFAULT_NO_MEETING_PATTERN;
+    leds[0].availablePattern = DEFAULT_AVAILABLE_PATTERN;
     leds[0].enabled = true;
     leds[0].lastToggle = 0;
     leds[0].state = false;
@@ -428,12 +430,14 @@ void updateMultipleLEDs() {
       case STATE_MONITORING:
         // LED behavior based on Teams presence using individual patterns
         switch (currentPresence) {
-          case PRESENCE_IN_MEETING:
           case PRESENCE_BUSY:
+            applyLEDPattern(i, leds[i].callPattern);
+            break;
+          case PRESENCE_IN_MEETING:
             applyLEDPattern(i, leds[i].meetingPattern);
             break;
           default:
-            applyLEDPattern(i, leds[i].noMeetingPattern);
+            applyLEDPattern(i, leds[i].availablePattern);
             break;
         }
         break;
@@ -873,6 +877,21 @@ void handleConfig() {
     html += "</div>";
     
     html += "<div class=\"form-group\">";
+    html += "<label for=\"led_call_" + String(i) + "\">Call Pattern</label>";
+    html += "<select id=\"led_call_" + String(i) + "\" name=\"led_call_" + String(i) + "\">";
+    LEDPattern callPat = (i < ledCount) ? leds[i].callPattern : DEFAULT_CALL_PATTERN;
+    html += "<option value=\"0\"" + String(callPat == 0 ? " selected" : "") + ">Off</option>";
+    html += "<option value=\"1\"" + String(callPat == 1 ? " selected" : "") + ">Solid</option>";
+    html += "<option value=\"2\"" + String(callPat == 2 ? " selected" : "") + ">Slow Blink (1s)</option>";
+    html += "<option value=\"3\"" + String(callPat == 3 ? " selected" : "") + ">Medium Blink (0.5s)</option>";
+    html += "<option value=\"4\"" + String(callPat == 4 ? " selected" : "") + ">Fast Blink (0.2s) (Default)</option>";
+    html += "<option value=\"5\"" + String(callPat == 5 ? " selected" : "") + ">Double Blink</option>";
+    html += "<option value=\"6\"" + String(callPat == 6 ? " selected" : "") + ">Dim Solid</option>";
+    html += "</select>";
+    html += "<div class=\"help\">&#x1F4F5; Pattern during calls (busy status)</div>";
+    html += "</div>";
+    
+    html += "<div class=\"form-group\">";
     html += "<label for=\"led_meeting_" + String(i) + "\">Meeting Pattern</label>";
     html += "<select id=\"led_meeting_" + String(i) + "\" name=\"led_meeting_" + String(i) + "\">";
     LEDPattern meetPat = (i < ledCount) ? leds[i].meetingPattern : DEFAULT_MEETING_PATTERN;
@@ -884,13 +903,13 @@ void handleConfig() {
     html += "<option value=\"5\"" + String(meetPat == 5 ? " selected" : "") + ">Double Blink</option>";
     html += "<option value=\"6\"" + String(meetPat == 6 ? " selected" : "") + ">Dim Solid</option>";
     html += "</select>";
-    html += "<div class=\"help\">&#x1F534; Pattern during meetings/busy</div>";
+    html += "<div class=\"help\">&#x1F4C5; Pattern during meetings</div>";
     html += "</div>";
     
     html += "<div class=\"form-group\">";
     html += "<label for=\"led_available_" + String(i) + "\">Available Pattern</label>";
     html += "<select id=\"led_available_" + String(i) + "\" name=\"led_available_" + String(i) + "\">";
-    LEDPattern availPat = (i < ledCount) ? leds[i].noMeetingPattern : DEFAULT_NO_MEETING_PATTERN;
+    LEDPattern availPat = (i < ledCount) ? leds[i].availablePattern : DEFAULT_AVAILABLE_PATTERN;
     html += "<option value=\"0\"" + String(availPat == 0 ? " selected" : "") + ">Off (Default)</option>";
     html += "<option value=\"1\"" + String(availPat == 1 ? " selected" : "") + ">Solid</option>";
     html += "<option value=\"2\"" + String(availPat == 2 ? " selected" : "") + ">Slow Blink (1s)</option>";
@@ -899,7 +918,7 @@ void handleConfig() {
     html += "<option value=\"5\"" + String(availPat == 5 ? " selected" : "") + ">Double Blink</option>";
     html += "<option value=\"6\"" + String(availPat == 6 ? " selected" : "") + ">Dim Solid</option>";
     html += "</select>";
-    html += "<div class=\"help\">&#x1F7E2; Pattern when available (optional)</div>";
+    html += "<div class=\"help\">&#x1F7E2; Pattern when available</div>";
     html += "</div>";
     html += "</div>";
   }
@@ -1041,6 +1060,7 @@ void handleSave() {
     // Save individual LED configurations
     for (uint8_t i = 0; i < ledCount; i++) {
       String pinArg = "led_pin_" + String(i);
+      String callArg = "led_call_" + String(i);
       String meetArg = "led_meeting_" + String(i);
       String availArg = "led_available_" + String(i);
       
@@ -1058,6 +1078,17 @@ void handleSave() {
         }
       }
       
+      if (server.hasArg(callArg)) {
+        LEDPattern newPattern = (LEDPattern)server.arg(callArg).toInt();
+        if (i < MAX_LEDS && (i >= ledCount || leds[i].callPattern != newPattern)) {
+          if (i < ledCount) {
+            LOG_INFOF("LED %d call pattern changed from %d to %d", i, leds[i].callPattern, newPattern);
+          }
+          leds[i].callPattern = newPattern;
+          configChanged = true;
+        }
+      }
+      
       if (server.hasArg(meetArg)) {
         LEDPattern newPattern = (LEDPattern)server.arg(meetArg).toInt();
         if (i < MAX_LEDS && (i >= ledCount || leds[i].meetingPattern != newPattern)) {
@@ -1071,11 +1102,11 @@ void handleSave() {
       
       if (server.hasArg(availArg)) {
         LEDPattern newPattern = (LEDPattern)server.arg(availArg).toInt();
-        if (i < MAX_LEDS && (i >= ledCount || leds[i].noMeetingPattern != newPattern)) {
+        if (i < MAX_LEDS && (i >= ledCount || leds[i].availablePattern != newPattern)) {
           if (i < ledCount) {
-            LOG_INFOF("LED %d available pattern changed from %d to %d", i, leds[i].noMeetingPattern, newPattern);
+            LOG_INFOF("LED %d available pattern changed from %d to %d", i, leds[i].availablePattern, newPattern);
           }
-          leds[i].noMeetingPattern = newPattern;
+          leds[i].availablePattern = newPattern;
           configChanged = true;
         }
       }
@@ -1092,8 +1123,9 @@ void handleSave() {
     
     // Update legacy patterns for backward compatibility (use first LED)
     if (ledCount > 0) {
+      callPattern = leds[0].callPattern;
       meetingPattern = leds[0].meetingPattern;
-      noMeetingPattern = leds[0].noMeetingPattern;
+      availablePattern = leds[0].availablePattern;
     }
   } else {
     // Legacy LED pattern handling for backward compatibility
@@ -1811,8 +1843,9 @@ void loadConfiguration() {
   deviceCodeExpires = preferences.getULong64(KEY_DEVICE_CODE_EXPIRES, 0);
   
   // Load LED pattern preferences (legacy for backward compatibility)
+  callPattern = (LEDPattern)preferences.getUInt("call_pattern", DEFAULT_CALL_PATTERN);
   meetingPattern = (LEDPattern)preferences.getUInt(KEY_MEETING_PATTERN, DEFAULT_MEETING_PATTERN);
-  noMeetingPattern = (LEDPattern)preferences.getUInt(KEY_NO_MEETING_PATTERN, DEFAULT_NO_MEETING_PATTERN);
+  availablePattern = (LEDPattern)preferences.getUInt(KEY_NO_MEETING_PATTERN, DEFAULT_AVAILABLE_PATTERN);
   
   // Load multiple LED configuration
   ledCount = preferences.getUInt(KEY_LED_COUNT, 0);
@@ -1825,12 +1858,14 @@ void loadConfiguration() {
     // Load configured LEDs
     for (uint8_t i = 0; i < ledCount; i++) {
       String pinKey = String(KEY_LED_PIN_PREFIX) + String(i);
+      String callKey = String(KEY_LED_CALL_PATTERN_PREFIX) + String(i);
       String meetKey = String(KEY_LED_MEETING_PATTERN_PREFIX) + String(i);
-      String availKey = String(KEY_LED_NO_MEETING_PATTERN_PREFIX) + String(i);
+      String availKey = String(KEY_LED_AVAILABLE_PATTERN_PREFIX) + String(i);
       
       leds[i].pin = preferences.getUInt(pinKey.c_str(), LED_PIN);
+      leds[i].callPattern = (LEDPattern)preferences.getUInt(callKey.c_str(), DEFAULT_CALL_PATTERN);
       leds[i].meetingPattern = (LEDPattern)preferences.getUInt(meetKey.c_str(), DEFAULT_MEETING_PATTERN);
-      leds[i].noMeetingPattern = (LEDPattern)preferences.getUInt(availKey.c_str(), DEFAULT_NO_MEETING_PATTERN);
+      leds[i].availablePattern = (LEDPattern)preferences.getUInt(availKey.c_str(), DEFAULT_AVAILABLE_PATTERN);
       leds[i].enabled = true;
       leds[i].lastToggle = 0;
       leds[i].state = false;
@@ -1849,12 +1884,13 @@ void loadConfiguration() {
   LOG_INFOF("Client Secret: %s", clientSecret.length() > 0 ? "(configured)" : "(not configured)");
   LOG_INFOF("Access Token: %s", accessToken.length() > 0 ? "(available)" : "(not available)");
   LOG_INFOF("Refresh Token: %s", refreshToken.length() > 0 ? "(available)" : "(not available)");
+  LOG_INFOF("Call LED Pattern: %d", callPattern);
   LOG_INFOF("Meeting LED Pattern: %d", meetingPattern);
-  LOG_INFOF("No Meeting LED Pattern: %d", noMeetingPattern);
+  LOG_INFOF("Available LED Pattern: %d", availablePattern);
   LOG_INFOF("LED Count: %d", ledCount);
   for (uint8_t i = 0; i < ledCount; i++) {
-    LOG_INFOF("LED %d: GPIO %d, Meeting: %d, Available: %d", 
-              i, leds[i].pin, leds[i].meetingPattern, leds[i].noMeetingPattern);
+    LOG_INFOF("LED %d: GPIO %d, Call: %d, Meeting: %d, Available: %d", 
+              i, leds[i].pin, leds[i].callPattern, leds[i].meetingPattern, leds[i].availablePattern);
   }
   
   if (tokenExpires > 0) {
@@ -1883,19 +1919,22 @@ void saveConfiguration() {
   preferences.putULong64(KEY_TOKEN_EXPIRES, tokenExpires);
   
   // Save LED pattern preferences (legacy for backward compatibility)
+  preferences.putUInt("call_pattern", callPattern);
   preferences.putUInt(KEY_MEETING_PATTERN, meetingPattern);
-  preferences.putUInt(KEY_NO_MEETING_PATTERN, noMeetingPattern);
+  preferences.putUInt(KEY_NO_MEETING_PATTERN, availablePattern);
   
   // Save multiple LED configuration
   preferences.putUInt(KEY_LED_COUNT, ledCount);
   for (uint8_t i = 0; i < ledCount; i++) {
     String pinKey = String(KEY_LED_PIN_PREFIX) + String(i);
+    String callKey = String(KEY_LED_CALL_PATTERN_PREFIX) + String(i);
     String meetKey = String(KEY_LED_MEETING_PATTERN_PREFIX) + String(i);
-    String availKey = String(KEY_LED_NO_MEETING_PATTERN_PREFIX) + String(i);
+    String availKey = String(KEY_LED_AVAILABLE_PATTERN_PREFIX) + String(i);
     
     preferences.putUInt(pinKey.c_str(), leds[i].pin);
+    preferences.putUInt(callKey.c_str(), leds[i].callPattern);
     preferences.putUInt(meetKey.c_str(), leds[i].meetingPattern);
-    preferences.putUInt(availKey.c_str(), leds[i].noMeetingPattern);
+    preferences.putUInt(availKey.c_str(), leds[i].availablePattern);
   }
   
   LOG_INFO("Configuration saved successfully");
