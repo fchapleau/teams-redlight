@@ -22,6 +22,13 @@ bool ledState = false;
 unsigned long lastPresenceCheck = 0;
 unsigned long tokenExpires = 0;
 
+// LED Pattern state
+LEDPattern meetingPattern = DEFAULT_MEETING_PATTERN;
+LEDPattern noMeetingPattern = DEFAULT_NO_MEETING_PATTERN;
+unsigned long doubleBlinksStartTime = 0;
+bool doubleBlinksState = false;
+int doubleBlinksCount = 0;
+
 // Configuration variables
 String wifiSSID;
 String wifiPassword;
@@ -43,6 +50,7 @@ unsigned long lastDeviceCodePoll = 0;
 void setupLED();
 void updateLED();
 void setLEDState(int state);  // Helper function to control both LEDs
+void applyLEDPattern(LEDPattern pattern);  // Apply selected LED pattern
 void setupWiFiAP();
 void setupWiFiSTA();
 void setupWebServer();
@@ -194,6 +202,79 @@ void setLEDState(int state) {
   }
 }
 
+void applyLEDPattern(LEDPattern pattern) {
+  static unsigned long lastPatternToggle = 0;
+  static bool patternState = false;
+  unsigned long currentTime = millis();
+  
+  switch (pattern) {
+    case PATTERN_OFF:
+      setLEDState(LOW);
+      break;
+      
+    case PATTERN_SOLID:
+      setLEDState(HIGH);
+      break;
+      
+    case PATTERN_DIM_SOLID:
+      // For simple on/off LEDs, this is the same as solid
+      // Could be enhanced for PWM in future
+      setLEDState(HIGH);
+      break;
+      
+    case PATTERN_SLOW_BLINK:
+      if (currentTime - lastPatternToggle > LED_PATTERN_SLOW_BLINK_INTERVAL) {
+        patternState = !patternState;
+        setLEDState(patternState ? HIGH : LOW);
+        lastPatternToggle = currentTime;
+      }
+      break;
+      
+    case PATTERN_MEDIUM_BLINK:
+      if (currentTime - lastPatternToggle > LED_PATTERN_MEDIUM_BLINK_INTERVAL) {
+        patternState = !patternState;
+        setLEDState(patternState ? HIGH : LOW);
+        lastPatternToggle = currentTime;
+      }
+      break;
+      
+    case PATTERN_FAST_BLINK:
+      if (currentTime - lastPatternToggle > LED_PATTERN_FAST_BLINK_INTERVAL) {
+        patternState = !patternState;
+        setLEDState(patternState ? HIGH : LOW);
+        lastPatternToggle = currentTime;
+      }
+      break;
+      
+    case PATTERN_DOUBLE_BLINK:
+      // Double blink pattern: on-off-on-off-pause
+      if (doubleBlinksStartTime == 0) {
+        doubleBlinksStartTime = currentTime;
+        doubleBlinksCount = 0;
+        doubleBlinksState = true;
+        setLEDState(HIGH);
+      } else {
+        unsigned long elapsed = currentTime - doubleBlinksStartTime;
+        
+        if (doubleBlinksCount < 4) { // 4 transitions = 2 blinks
+          if (elapsed > LED_PATTERN_DOUBLE_BLINK_ON_TIME * (doubleBlinksCount + 1)) {
+            doubleBlinksState = !doubleBlinksState;
+            setLEDState(doubleBlinksState ? HIGH : LOW);
+            doubleBlinksCount++;
+          }
+        } else if (elapsed > LED_PATTERN_DOUBLE_BLINK_INTERVAL) {
+          // Reset for next cycle
+          doubleBlinksStartTime = 0;
+        }
+      }
+      break;
+      
+    default:
+      setLEDState(LOW);
+      break;
+  }
+}
+
 void updateLED() {
   unsigned long interval;
   static DeviceState lastLoggedState = STATE_ERROR; // Initialize to invalid state
@@ -222,21 +303,21 @@ void updateLED() {
       break;
     case STATE_AUTHENTICATED:
     case STATE_MONITORING:
-      // LED behavior based on Teams presence
+      // LED behavior based on Teams presence using selected patterns
       switch (currentPresence) {
         case PRESENCE_IN_MEETING:
         case PRESENCE_BUSY:
-          setLEDState(HIGH); // Solid red
+          applyLEDPattern(meetingPattern);
           if (lastLoggedState != STATE_MONITORING) {
-            LOG_INFOF("LED: Solid ON (presence: %s)", 
-                     currentPresence == PRESENCE_IN_MEETING ? "In Meeting" : "Busy");
+            LOG_INFOF("LED: Meeting pattern %d (presence: %s)", 
+                     meetingPattern, currentPresence == PRESENCE_IN_MEETING ? "In Meeting" : "Busy");
             lastLoggedState = STATE_MONITORING;
           }
           return;
         default:
-          setLEDState(LOW); // Off
+          applyLEDPattern(noMeetingPattern);
           if (lastLoggedState != STATE_MONITORING) {
-            LOG_DEBUG("LED: OFF (available/away/offline)");
+            LOG_DEBUGF("LED: No meeting pattern %d (available/away/offline)", noMeetingPattern);
             lastLoggedState = STATE_MONITORING;
           }
           return;
@@ -535,8 +616,8 @@ void handleConfig() {
   html += ".section h3 { color: #d73502; margin-bottom: 1rem; font-size: 1.2rem; }";
   html += ".form-group { margin-bottom: 1rem; }";
   html += "label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333; }";
-  html += "input[type=\"text\"], input[type=\"password\"], input[type=\"email\"] { width: 100%; padding: 0.75rem; border: 2px solid #e9ecef; border-radius: 6px; font-size: 1rem; transition: border-color 0.2s ease; }";
-  html += "input:focus { outline: none; border-color: #d73502; }";
+  html += "input[type=\"text\"], input[type=\"password\"], input[type=\"email\"], select { width: 100%; padding: 0.75rem; border: 2px solid #e9ecef; border-radius: 6px; font-size: 1rem; transition: border-color 0.2s ease; }";
+  html += "input:focus, select:focus { outline: none; border-color: #d73502; }";
   html += ".help { font-size: 0.875rem; color: #6c757d; margin-top: 0.25rem; }";
   html += ".actions { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 2rem; }";
   html += ".btn { background: #d73502; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; font-size: 1rem; cursor: pointer; transition: all 0.2s ease; text-decoration: none; text-align: center; display: inline-block; }";
@@ -599,6 +680,35 @@ void handleConfig() {
   html += "<label for=\"ota_url\">Update URL</label>";
   html += "<input type=\"text\" id=\"ota_url\" name=\"ota_url\" value=\"" + preferences.getString(OTA_UPDATE_URL_KEY, DEFAULT_OTA_URL) + "\" placeholder=\"https://github.com/...\">";
   html += "<div class=\"help\">&#x1F310; URL for over-the-air firmware updates</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "<div class=\"section\">";
+  html += "<h3>&#x1F4A1; LED Pattern Settings</h3>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"meeting_pattern\">LED Pattern During Meetings</label>";
+  html += "<select id=\"meeting_pattern\" name=\"meeting_pattern\">";
+  html += "<option value=\"0\"" + String(meetingPattern == 0 ? " selected" : "") + ">Off</option>";
+  html += "<option value=\"1\"" + String(meetingPattern == 1 ? " selected" : "") + ">Solid (Default)</option>";
+  html += "<option value=\"2\"" + String(meetingPattern == 2 ? " selected" : "") + ">Slow Blink (1s)</option>";
+  html += "<option value=\"3\"" + String(meetingPattern == 3 ? " selected" : "") + ">Medium Blink (0.5s)</option>";
+  html += "<option value=\"4\"" + String(meetingPattern == 4 ? " selected" : "") + ">Fast Blink (0.2s)</option>";
+  html += "<option value=\"5\"" + String(meetingPattern == 5 ? " selected" : "") + ">Double Blink</option>";
+  html += "<option value=\"6\"" + String(meetingPattern == 6 ? " selected" : "") + ">Dim Solid</option>";
+  html += "</select>";
+  html += "<div class=\"help\">&#x1F534; Choose how the LED behaves when you're in a meeting or busy</div>";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"no_meeting_pattern\">LED Pattern When Available</label>";
+  html += "<select id=\"no_meeting_pattern\" name=\"no_meeting_pattern\">";
+  html += "<option value=\"0\"" + String(noMeetingPattern == 0 ? " selected" : "") + ">Off (Default)</option>";
+  html += "<option value=\"1\"" + String(noMeetingPattern == 1 ? " selected" : "") + ">Solid</option>";
+  html += "<option value=\"2\"" + String(noMeetingPattern == 2 ? " selected" : "") + ">Slow Blink (1s)</option>";
+  html += "<option value=\"3\"" + String(noMeetingPattern == 3 ? " selected" : "") + ">Medium Blink (0.5s)</option>";
+  html += "<option value=\"4\"" + String(noMeetingPattern == 4 ? " selected" : "") + ">Fast Blink (0.2s)</option>";
+  html += "<option value=\"5\"" + String(noMeetingPattern == 5 ? " selected" : "") + ">Double Blink</option>";
+  html += "<option value=\"6\"" + String(noMeetingPattern == 6 ? " selected" : "") + ">Dim Solid</option>";
+  html += "</select>";
+  html += "<div class=\"help\">&#x1F7E2; Choose how the LED behaves when you're available (optional)</div>";
   html += "</div>";
   html += "</div>";
   html += "<div class=\"actions\">";
@@ -706,6 +816,27 @@ void handleSave() {
     if (otaUrl != currentOtaUrl) {
       LOG_INFOF("OTA URL changed to: %s", otaUrl.c_str());
       preferences.putString(OTA_UPDATE_URL_KEY, otaUrl);
+      configChanged = true;
+    }
+  }
+  
+  // Save LED pattern configuration
+  if (server.hasArg("meeting_pattern")) {
+    LEDPattern newMeetingPattern = (LEDPattern)server.arg("meeting_pattern").toInt();
+    if (newMeetingPattern != meetingPattern) {
+      LOG_INFOF("Meeting LED pattern changed from %d to %d", meetingPattern, newMeetingPattern);
+      meetingPattern = newMeetingPattern;
+      preferences.putUInt(KEY_MEETING_PATTERN, meetingPattern);
+      configChanged = true;
+    }
+  }
+  
+  if (server.hasArg("no_meeting_pattern")) {
+    LEDPattern newNoMeetingPattern = (LEDPattern)server.arg("no_meeting_pattern").toInt();
+    if (newNoMeetingPattern != noMeetingPattern) {
+      LOG_INFOF("No meeting LED pattern changed from %d to %d", noMeetingPattern, newNoMeetingPattern);
+      noMeetingPattern = newNoMeetingPattern;
+      preferences.putUInt(KEY_NO_MEETING_PATTERN, noMeetingPattern);
       configChanged = true;
     }
   }
@@ -1402,6 +1533,10 @@ void loadConfiguration() {
   verificationUri = preferences.getString(KEY_VERIFICATION_URI, "");
   deviceCodeExpires = preferences.getULong64(KEY_DEVICE_CODE_EXPIRES, 0);
   
+  // Load LED pattern preferences
+  meetingPattern = (LEDPattern)preferences.getUInt(KEY_MEETING_PATTERN, DEFAULT_MEETING_PATTERN);
+  noMeetingPattern = (LEDPattern)preferences.getUInt(KEY_NO_MEETING_PATTERN, DEFAULT_NO_MEETING_PATTERN);
+  
   // Log configuration status (without sensitive data)
   LOG_INFOF("WiFi SSID: %s", wifiSSID.length() > 0 ? wifiSSID.c_str() : "(not configured)");
   LOG_INFOF("WiFi Password: %s", wifiPassword.length() > 0 ? "(configured)" : "(not configured)");
@@ -1411,6 +1546,8 @@ void loadConfiguration() {
   LOG_INFOF("Client Secret: %s", clientSecret.length() > 0 ? "(configured)" : "(not configured)");
   LOG_INFOF("Access Token: %s", accessToken.length() > 0 ? "(available)" : "(not available)");
   LOG_INFOF("Refresh Token: %s", refreshToken.length() > 0 ? "(available)" : "(not available)");
+  LOG_INFOF("Meeting LED Pattern: %d", meetingPattern);
+  LOG_INFOF("No Meeting LED Pattern: %d", noMeetingPattern);
   
   if (tokenExpires > 0) {
     long timeToExpiry = (long)(tokenExpires - millis()) / 1000;
@@ -1436,6 +1573,10 @@ void saveConfiguration() {
   preferences.putString(KEY_ACCESS_TOKEN, accessToken);
   preferences.putString(KEY_REFRESH_TOKEN, refreshToken);
   preferences.putULong64(KEY_TOKEN_EXPIRES, tokenExpires);
+  
+  // Save LED pattern preferences
+  preferences.putUInt(KEY_MEETING_PATTERN, meetingPattern);
+  preferences.putUInt(KEY_NO_MEETING_PATTERN, noMeetingPattern);
   
   LOG_INFO("Configuration saved successfully");
 }

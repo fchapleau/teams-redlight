@@ -48,11 +48,35 @@
 #define KEY_VERIFICATION_URI "verify_uri"
 #define KEY_DEVICE_CODE_EXPIRES "dev_code_exp"
 
-
+// LED Pattern Storage Keys
+#define KEY_MEETING_PATTERN "meeting_pattern"
+#define KEY_NO_MEETING_PATTERN "no_meeting_pattern"
 
 // Update Configuration
 #define OTA_UPDATE_URL_KEY "ota_url"
 #define DEFAULT_OTA_URL "https://github.com/fchapleau/teams-redlight/releases/latest/download/firmware.bin"
+
+// LED Pattern Types
+enum LEDPattern {
+  PATTERN_OFF = 0,
+  PATTERN_SOLID = 1,
+  PATTERN_SLOW_BLINK = 2,       // 1000ms intervals
+  PATTERN_MEDIUM_BLINK = 3,     // 500ms intervals  
+  PATTERN_FAST_BLINK = 4,       // 200ms intervals
+  PATTERN_DOUBLE_BLINK = 5,     // Double blink every 1000ms
+  PATTERN_DIM_SOLID = 6         // Always on but dimmed (for PWM-capable pins)
+};
+
+// Default LED patterns
+#define DEFAULT_MEETING_PATTERN PATTERN_SOLID
+#define DEFAULT_NO_MEETING_PATTERN PATTERN_OFF
+
+// LED Pattern Intervals
+#define LED_PATTERN_SLOW_BLINK_INTERVAL 1000     // 1 second
+#define LED_PATTERN_MEDIUM_BLINK_INTERVAL 500    // 500ms
+#define LED_PATTERN_FAST_BLINK_INTERVAL 200      // 200ms
+#define LED_PATTERN_DOUBLE_BLINK_INTERVAL 1000   // 1 second cycle
+#define LED_PATTERN_DOUBLE_BLINK_ON_TIME 100     // 100ms on time for double blink
 
 // Device States
 enum DeviceState {
