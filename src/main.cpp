@@ -1141,10 +1141,10 @@ void handleSave() {
     
     if (server.hasArg("no_meeting_pattern")) {
       LEDPattern newNoMeetingPattern = (LEDPattern)server.arg("no_meeting_pattern").toInt();
-      if (newNoMeetingPattern != noMeetingPattern) {
-        LOG_INFOF("No meeting LED pattern changed from %d to %d", noMeetingPattern, newNoMeetingPattern);
-        noMeetingPattern = newNoMeetingPattern;
-        preferences.putUInt(KEY_NO_MEETING_PATTERN, noMeetingPattern);
+      if (newNoMeetingPattern != availablePattern) {
+        LOG_INFOF("No meeting LED pattern changed from %d to %d", availablePattern, newNoMeetingPattern);
+        availablePattern = newNoMeetingPattern;
+        preferences.putUInt(KEY_NO_MEETING_PATTERN, availablePattern);
         configChanged = true;
       }
     }

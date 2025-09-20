@@ -13,22 +13,22 @@ else
     echo "✅ No mock firmware creation step in workflow"
 fi
 
-# Test 2: Check that workflow explicitly skips firmware build when PlatformIO is not accessible
-echo "Test 2: Checking workflow skips firmware build appropriately..."
+# Test 2: Check that workflow does not skip firmware build - builds should fail if compilation fails
+echo "Test 2: Checking workflow does not skip firmware build inappropriately..."
 if grep -q "Skip firmware build (PlatformIO not accessible)" .github/workflows/build.yml; then
-    echo "✅ Workflow explicitly skips firmware build when needed"
-else
-    echo "❌ Workflow does not properly skip firmware build"
+    echo "❌ Workflow inappropriately skips firmware build instead of failing"
     exit 1
+else
+    echo "✅ Workflow does not skip firmware build - will fail if compilation fails"
 fi
 
-# Test 3: Check that workflow states policy about mock firmware
-echo "Test 3: Checking workflow policy statement..."
+# Test 3: Check that workflow does not state policy about skipping firmware builds
+echo "Test 3: Checking workflow does not allow skipping firmware builds..."
 if grep -q "Only real firmware should be built, not mock/demonstration files" .github/workflows/build.yml; then
-    echo "✅ Workflow states policy against mock firmware"
-else
-    echo "❌ Workflow does not state policy against mock firmware"
+    echo "❌ Workflow inappropriately states policy about skipping firmware"
     exit 1
+else
+    echo "✅ Workflow does not allow skipping firmware builds"
 fi
 
 # Test 4: Verify ESP Web Tools uses real firmware from manifest, no mock files
