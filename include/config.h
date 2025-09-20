@@ -7,7 +7,8 @@
 #define AP_TIMEOUT 300000  // 5 minutes
 
 // LED Configuration
-#define LED_PIN 2                        // External LED pin
+#define MAX_LEDS 8                       // Maximum number of configurable LEDs
+#define LED_PIN 2                        // Default external LED pin (for backward compatibility)
 #ifndef LED_BUILTIN
   #define LED_BUILTIN_PIN 2             // Onboard LED pin (fallback if not defined by board)
 #else
@@ -16,6 +17,9 @@
 #define LED_SLOW_BLINK_INTERVAL 1000    // 1 second - no network
 #define LED_FAST_BLINK_INTERVAL 200     // 200ms - connecting to O365
 #define LED_VERY_FAST_BLINK_INTERVAL 100 // 100ms - AP mode
+
+// Available GPIO pins for LEDs on ESP32
+#define AVAILABLE_GPIO_PINS {2, 4, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33}
 
 // Network Configuration
 #define HTTP_PORT 80
@@ -51,6 +55,10 @@
 // LED Pattern Storage Keys
 #define KEY_MEETING_PATTERN "meeting_pattern"
 #define KEY_NO_MEETING_PATTERN "no_meeting_pattern"
+#define KEY_LED_COUNT "led_count"
+#define KEY_LED_PIN_PREFIX "led_pin_"
+#define KEY_LED_MEETING_PATTERN_PREFIX "led_meet_"
+#define KEY_LED_NO_MEETING_PATTERN_PREFIX "led_avail_"
 
 // Update Configuration
 #define OTA_UPDATE_URL_KEY "ota_url"
@@ -97,6 +105,20 @@ enum TeamsPresence {
   PRESENCE_IN_MEETING,
   PRESENCE_AWAY,
   PRESENCE_OFFLINE
+};
+
+// LED Configuration Structure
+struct LEDConfig {
+  uint8_t pin;
+  LEDPattern meetingPattern;
+  LEDPattern noMeetingPattern;
+  bool enabled;
+  // Pattern state variables
+  unsigned long lastToggle;
+  bool state;
+  unsigned long doubleBlinksStartTime;
+  bool doubleBlinksState;
+  int doubleBlinksCount;
 };
 
 #endif // CONFIG_H
