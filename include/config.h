@@ -48,10 +48,7 @@
 #define KEY_VERIFICATION_URI "verify_uri"
 #define KEY_DEVICE_CODE_EXPIRES "dev_code_exp"
 
-// SSL Certificate Storage Keys
-#define KEY_SSL_CERT "ssl_cert"
-#define KEY_SSL_KEY "ssl_key"
-#define KEY_SSL_ENABLED "ssl_enabled"
+
 
 // Update Configuration
 #define OTA_UPDATE_URL_KEY "ota_url"
