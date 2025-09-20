@@ -916,9 +916,23 @@
             }
         });
         
+        // Fetch and display version from manifest
+        async function loadVersionInfo() {
+            try {
+                const response = await fetch('./manifest.json');
+                const manifest = await response.json();
+                const deviceStatus = document.getElementById('deviceStatus');
+                const currentContent = deviceStatus.innerHTML;
+                deviceStatus.innerHTML = currentContent + `<br><small>Firmware Version: ${manifest.version}</small>`;
+            } catch (error) {
+                console.warn('Could not load version info:', error);
+            }
+        }
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             checkBrowserSupport();
+            loadVersionInfo();
         });
     </script>
 </body>
