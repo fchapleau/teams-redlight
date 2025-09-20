@@ -194,6 +194,8 @@ void initDefaultLEDs() {
     leds[0].callPattern = DEFAULT_CALL_PATTERN;
     leds[0].meetingPattern = DEFAULT_MEETING_PATTERN;
     leds[0].availablePattern = DEFAULT_AVAILABLE_PATTERN;
+    leds[0].awayPattern = DEFAULT_AWAY_PATTERN;
+    leds[0].offlinePattern = DEFAULT_OFFLINE_PATTERN;
     leds[0].enabled = true;
     leds[0].lastToggle = 0;
     leds[0].state = false;
@@ -435,6 +437,15 @@ void updateMultipleLEDs() {
             break;
           case PRESENCE_IN_MEETING:
             applyLEDPattern(i, leds[i].meetingPattern);
+            break;
+          case PRESENCE_AVAILABLE:
+            applyLEDPattern(i, leds[i].availablePattern);
+            break;
+          case PRESENCE_AWAY:
+            applyLEDPattern(i, leds[i].awayPattern);
+            break;
+          case PRESENCE_OFFLINE:
+            applyLEDPattern(i, leds[i].offlinePattern);
             break;
           default:
             applyLEDPattern(i, leds[i].availablePattern);
@@ -920,6 +931,36 @@ void handleConfig() {
     html += "</select>";
     html += "<div class=\"help\">&#x1F7E2; Pattern when available</div>";
     html += "</div>";
+    
+    html += "<div class=\"form-group\">";
+    html += "<label for=\"led_away_" + String(i) + "\">Away Pattern</label>";
+    html += "<select id=\"led_away_" + String(i) + "\" name=\"led_away_" + String(i) + "\">";
+    LEDPattern awayPat = (i < ledCount) ? leds[i].awayPattern : DEFAULT_AWAY_PATTERN;
+    html += "<option value=\"0\"" + String(awayPat == 0 ? " selected" : "") + ">Off (Default)</option>";
+    html += "<option value=\"1\"" + String(awayPat == 1 ? " selected" : "") + ">Solid</option>";
+    html += "<option value=\"2\"" + String(awayPat == 2 ? " selected" : "") + ">Slow Blink (1s)</option>";
+    html += "<option value=\"3\"" + String(awayPat == 3 ? " selected" : "") + ">Medium Blink (0.5s)</option>";
+    html += "<option value=\"4\"" + String(awayPat == 4 ? " selected" : "") + ">Fast Blink (0.2s)</option>";
+    html += "<option value=\"5\"" + String(awayPat == 5 ? " selected" : "") + ">Double Blink</option>";
+    html += "<option value=\"6\"" + String(awayPat == 6 ? " selected" : "") + ">Dim Solid</option>";
+    html += "</select>";
+    html += "<div class=\"help\">&#x1F530; Pattern when away</div>";
+    html += "</div>";
+    
+    html += "<div class=\"form-group\">";
+    html += "<label for=\"led_offline_" + String(i) + "\">Offline Pattern</label>";
+    html += "<select id=\"led_offline_" + String(i) + "\" name=\"led_offline_" + String(i) + "\">";
+    LEDPattern offlinePat = (i < ledCount) ? leds[i].offlinePattern : DEFAULT_OFFLINE_PATTERN;
+    html += "<option value=\"0\"" + String(offlinePat == 0 ? " selected" : "") + ">Off (Default)</option>";
+    html += "<option value=\"1\"" + String(offlinePat == 1 ? " selected" : "") + ">Solid</option>";
+    html += "<option value=\"2\"" + String(offlinePat == 2 ? " selected" : "") + ">Slow Blink (1s)</option>";
+    html += "<option value=\"3\"" + String(offlinePat == 3 ? " selected" : "") + ">Medium Blink (0.5s)</option>";
+    html += "<option value=\"4\"" + String(offlinePat == 4 ? " selected" : "") + ">Fast Blink (0.2s)</option>";
+    html += "<option value=\"5\"" + String(offlinePat == 5 ? " selected" : "") + ">Double Blink</option>";
+    html += "<option value=\"6\"" + String(offlinePat == 6 ? " selected" : "") + ">Dim Solid</option>";
+    html += "</select>";
+    html += "<div class=\"help\">&#x1F534; Pattern when offline</div>";
+    html += "</div>";
     html += "</div>";
   }
   html += "</div>";
@@ -1111,8 +1152,40 @@ void handleSave() {
         }
       }
       
+      String awayArg = "led_away_" + String(i);
+      if (server.hasArg(awayArg)) {
+        LEDPattern newPattern = (LEDPattern)server.arg(awayArg).toInt();
+        if (i < MAX_LEDS && (i >= ledCount || leds[i].awayPattern != newPattern)) {
+          if (i < ledCount) {
+            LOG_INFOF("LED %d away pattern changed from %d to %d", i, leds[i].awayPattern, newPattern);
+          }
+          leds[i].awayPattern = newPattern;
+          configChanged = true;
+        }
+      }
+      
+      String offlineArg = "led_offline_" + String(i);
+      if (server.hasArg(offlineArg)) {
+        LEDPattern newPattern = (LEDPattern)server.arg(offlineArg).toInt();
+        if (i < MAX_LEDS && (i >= ledCount || leds[i].offlinePattern != newPattern)) {
+          if (i < ledCount) {
+            LOG_INFOF("LED %d offline pattern changed from %d to %d", i, leds[i].offlinePattern, newPattern);
+          }
+          leds[i].offlinePattern = newPattern;
+          configChanged = true;
+        }
+      }
+      
       // Initialize LED state variables
       if (i < MAX_LEDS) {
+        // Set default patterns for new LEDs if not already set
+        if (i >= ledCount) {
+          leds[i].callPattern = DEFAULT_CALL_PATTERN;
+          leds[i].meetingPattern = DEFAULT_MEETING_PATTERN;
+          leds[i].availablePattern = DEFAULT_AVAILABLE_PATTERN;
+          leds[i].awayPattern = DEFAULT_AWAY_PATTERN;
+          leds[i].offlinePattern = DEFAULT_OFFLINE_PATTERN;
+        }
         leds[i].lastToggle = 0;
         leds[i].state = false;
         leds[i].doubleBlinksStartTime = 0;
@@ -1281,6 +1354,8 @@ void handleStatus() {
     led["call_pattern"] = getPatternName(leds[i].callPattern);
     led["meeting_pattern"] = getPatternName(leds[i].meetingPattern);
     led["available_pattern"] = getPatternName(leds[i].availablePattern);
+    led["away_pattern"] = getPatternName(leds[i].awayPattern);
+    led["offline_pattern"] = getPatternName(leds[i].offlinePattern);
   }
   
   String response;
@@ -1891,11 +1966,15 @@ void loadConfiguration() {
       String callKey = String(KEY_LED_CALL_PATTERN_PREFIX) + String(i);
       String meetKey = String(KEY_LED_MEETING_PATTERN_PREFIX) + String(i);
       String availKey = String(KEY_LED_AVAILABLE_PATTERN_PREFIX) + String(i);
+      String awayKey = String(KEY_LED_AWAY_PATTERN_PREFIX) + String(i);
+      String offlineKey = String(KEY_LED_OFFLINE_PATTERN_PREFIX) + String(i);
       
       leds[i].pin = preferences.getUInt(pinKey.c_str(), LED_PIN);
       leds[i].callPattern = (LEDPattern)preferences.getUInt(callKey.c_str(), DEFAULT_CALL_PATTERN);
       leds[i].meetingPattern = (LEDPattern)preferences.getUInt(meetKey.c_str(), DEFAULT_MEETING_PATTERN);
       leds[i].availablePattern = (LEDPattern)preferences.getUInt(availKey.c_str(), DEFAULT_AVAILABLE_PATTERN);
+      leds[i].awayPattern = (LEDPattern)preferences.getUInt(awayKey.c_str(), DEFAULT_AWAY_PATTERN);
+      leds[i].offlinePattern = (LEDPattern)preferences.getUInt(offlineKey.c_str(), DEFAULT_OFFLINE_PATTERN);
       leds[i].enabled = true;
       leds[i].lastToggle = 0;
       leds[i].state = false;
@@ -1919,8 +1998,8 @@ void loadConfiguration() {
   LOG_INFOF("Available LED Pattern: %d", availablePattern);
   LOG_INFOF("LED Count: %d", ledCount);
   for (uint8_t i = 0; i < ledCount; i++) {
-    LOG_INFOF("LED %d: GPIO %d, Call: %d, Meeting: %d, Available: %d", 
-              i, leds[i].pin, leds[i].callPattern, leds[i].meetingPattern, leds[i].availablePattern);
+    LOG_INFOF("LED %d: GPIO %d, Call: %d, Meeting: %d, Available: %d, Away: %d, Offline: %d", 
+              i, leds[i].pin, leds[i].callPattern, leds[i].meetingPattern, leds[i].availablePattern, leds[i].awayPattern, leds[i].offlinePattern);
   }
   
   if (tokenExpires > 0) {
@@ -1960,11 +2039,15 @@ void saveConfiguration() {
     String callKey = String(KEY_LED_CALL_PATTERN_PREFIX) + String(i);
     String meetKey = String(KEY_LED_MEETING_PATTERN_PREFIX) + String(i);
     String availKey = String(KEY_LED_AVAILABLE_PATTERN_PREFIX) + String(i);
+    String awayKey = String(KEY_LED_AWAY_PATTERN_PREFIX) + String(i);
+    String offlineKey = String(KEY_LED_OFFLINE_PATTERN_PREFIX) + String(i);
     
     preferences.putUInt(pinKey.c_str(), leds[i].pin);
     preferences.putUInt(callKey.c_str(), leds[i].callPattern);
     preferences.putUInt(meetKey.c_str(), leds[i].meetingPattern);
     preferences.putUInt(availKey.c_str(), leds[i].availablePattern);
+    preferences.putUInt(awayKey.c_str(), leds[i].awayPattern);
+    preferences.putUInt(offlineKey.c_str(), leds[i].offlinePattern);
   }
   
   LOG_INFO("Configuration saved successfully");
