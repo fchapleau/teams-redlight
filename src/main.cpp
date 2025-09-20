@@ -1183,6 +1183,19 @@ void handleSave() {
   ESP.restart();
 }
 
+const char* getPatternName(LEDPattern pattern) {
+  switch (pattern) {
+    case PATTERN_OFF: return "Off";
+    case PATTERN_SOLID: return "Solid";
+    case PATTERN_SLOW_BLINK: return "Slow Blink";
+    case PATTERN_MEDIUM_BLINK: return "Medium Blink";
+    case PATTERN_FAST_BLINK: return "Fast Blink";
+    case PATTERN_DOUBLE_BLINK: return "Double Blink";
+    case PATTERN_DIM_SOLID: return "Dim Solid";
+    default: return "Unknown";
+  }
+}
+
 void handleStatus() {
   DynamicJsonDocument doc(1024);
   
@@ -1253,6 +1266,22 @@ void handleStatus() {
   }
   doc["has_token"] = accessToken.length() > 0;
   doc["uptime"] = millis() / 1000;
+  
+  // Add LED status information
+  doc["led_count"] = ledCount;
+  JsonArray ledArray = doc.createNestedArray("leds");
+  for (uint8_t i = 0; i < ledCount; i++) {
+    JsonObject led = ledArray.createNestedObject();
+    led["id"] = i;
+    led["pin"] = leds[i].pin;
+    led["enabled"] = leds[i].enabled;
+    led["current_state"] = leds[i].state;
+    
+    // Add pattern names for readability
+    led["call_pattern"] = getPatternName(leds[i].callPattern);
+    led["meeting_pattern"] = getPatternName(leds[i].meetingPattern);
+    led["available_pattern"] = getPatternName(leds[i].availablePattern);
+  }
   
   String response;
   serializeJson(doc, response);
