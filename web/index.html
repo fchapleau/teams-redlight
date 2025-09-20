@@ -919,7 +919,9 @@
         // Fetch and display version from manifest
         async function loadVersionInfo() {
             try {
-                const response = await fetch('./manifest.json');
+                // Add cache-busting parameter to force refresh of manifest
+                const cacheBuster = new Date().getTime();
+                const response = await fetch(`./manifest.json?v=${cacheBuster}`);
                 const manifest = await response.json();
                 const deviceStatus = document.getElementById('deviceStatus');
                 const currentContent = deviceStatus.innerHTML;
