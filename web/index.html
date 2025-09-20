@@ -1032,6 +1032,12 @@
                         currentPattern = led.call_pattern;
                     } else if (status.presence === 'In Meeting') {
                         currentPattern = led.meeting_pattern;
+                    } else if (status.presence === 'Available') {
+                        currentPattern = led.available_pattern;
+                    } else if (status.presence === 'Away') {
+                        currentPattern = led.away_pattern;
+                    } else if (status.presence === 'Offline') {
+                        currentPattern = led.offline_pattern;
                     } else {
                         currentPattern = led.available_pattern;
                     }
