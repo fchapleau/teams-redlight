@@ -6,29 +6,282 @@
     <title>Teams Red Light - ESP32 Flasher</title>
     <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
     <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 1rem;
         }
         
         .container {
+            max-width: 600px;
+            margin: 0 auto;
             background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
         }
         
-        h1 {
+        .header {
+            background: linear-gradient(135deg, #d73502, #b12d02);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+        
+        .main-content {
+            padding: 2rem;
+        }
+        
+        .flash-section {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .device-status {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border-left: 4px solid #28a745;
+        }
+        
+        .device-status.warning {
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }
+        
+        .device-status.error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        
+        .flash-button {
+            margin: 1.5rem 0;
+        }
+        
+        esp-web-install-button {
+            --esp-tools-button-color: #d73502;
+            --esp-tools-button-text-color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(215, 53, 2, 0.3);
+            transition: all 0.2s ease;
+        }
+        
+        esp-web-install-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(215, 53, 2, 0.4);
+        }
+        
+        .steps {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+        
+        .steps h3 {
             color: #d73502;
-            text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
         }
         
-        .hero-section {
+        .steps ol {
+            padding-left: 1.2rem;
+        }
+        
+        .steps li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .advanced-toggle {
+            background: none;
+            border: 1px solid #dee2e6;
+            color: #6c757d;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+            transition: all 0.2s ease;
+        }
+        
+        .advanced-toggle:hover {
+            background: #f8f9fa;
+            color: #495057;
+        }
+        
+        .advanced-content {
+            display: none;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .advanced-content.show {
+            display: block;
+        }
+        
+        .browser-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            color: #856404;
+        }
+        
+        .progress-section {
+            margin: 1rem 0;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #d73502;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .status-message {
+            font-size: 0.9rem;
+            color: #6c757d;
             text-align: center;
+        }
+        
+        .success-section {
+            text-align: center;
+            color: #28a745;
+        }
+        
+        .success-section h3 {
+            color: #28a745;
+            margin-bottom: 1rem;
+        }
+        
+        .footer {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            text-align: center;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .footer a {
+            color: #d73502;
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            body {
+                padding: 0.5rem;
+            }
+            
+            .header {
+                padding: 1.5rem;
+            }
+            
+            .header h1 {
+                font-size: 1.75rem;
+            }
+            
+            .main-content {
+                padding: 1.5rem;
+            }
+        }
+        
+        /* Animation for loading spinner */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        /* Utility classes */
+        .hidden {
+            display: none;
+        }
+        
+        .text-center {
+            text-align: center;
+        }
+        
+        .mt-1 { margin-top: 0.5rem; }
+        .mt-2 { margin-top: 1rem; }
+        .mb-1 { margin-bottom: 0.5rem; }
+        .mb-2 { margin-bottom: 1rem; }
+        
+        /* Button styles */
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background: #d73502;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        
+        .btn:hover {
+            background: #b12d02;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
             background: linear-gradient(135deg, #d73502, #b12d02);
             color: white;
             padding: 40px 30px;
@@ -442,327 +695,231 @@
 </head>
 <body>
     <div class="container">
-        <h1>🔴 Teams Red Light - ESP32 Flasher</h1>
-        
-        <div class="hero-section">
-            <h2>⚡ Web-Based ESP32 Flasher</h2>
-            <p>Flash your Teams Red Light firmware directly from your browser - no software installation required!</p>
-            
-            <div class="flash-button-container">
-                <esp-web-install-button 
-                    manifest="./manifest.json"
-                    install-supported
-                    class="flash-button">
-                    <span slot="activate">⚡ Flash ESP32 Device</span>
-                    <span slot="unsupported">Your browser doesn't support WebSerial</span>
-                    <span slot="not-allowed">Please enable WebSerial in your browser</span>
-                </esp-web-install-button>
-            </div>
+        <div class="header">
+            <h1>🔴 Teams Red Light</h1>
+            <p>Flash your ESP32 device directly from your browser</p>
         </div>
         
-        <div class="browser-support">
-            <h4>📋 Browser Compatibility</h4>
-            <p><span class="status-indicator status-ready"></span><strong>Supported:</strong> Chrome 89+, Edge 89+, Opera 75+</p>
-            <p><span class="status-indicator status-warning"></span><strong>Not Supported:</strong> Firefox, Safari (WebSerial API not available)</p>
-        </div>
-        
-        <div class="requirements">
-            <h3>📋 Requirements</h3>
-            <ul>
-                <li><strong>Compatible Browser:</strong> Chrome, Edge, or Opera with WebSerial support</li>
-                <li><strong>ESP32 Board:</strong> Any ESP32 development board (DevKitC, NodeMCU-32S, WROOM, etc.)</li>
-                <li><strong>USB Cable:</strong> USB cable for connecting ESP32 to computer</li>
-                <li><strong>Drivers:</strong> ESP32 USB drivers installed (usually automatic)</li>
-            </ul>
-        </div>
-        
-        <div class="features-grid">
-            <div class="feature-card">
-                <h3>🔧 Smart Bootloader Detection</h3>
-                <p>Automatically detects your ESP32 board type and attempts multiple bootloader entry methods. Provides step-by-step guidance for manual bootloader mode when needed.</p>
+        <div class="main-content">
+            <div class="flash-section">
+                <div class="device-status" id="deviceStatus">
+                    <strong>Ready to Flash</strong><br>
+                    Connect your ESP32 device via USB to get started
+                </div>
+                
+                <div class="flash-button">
+                    <esp-web-install-button 
+                        manifest="./manifest.json"
+                        install-supported>
+                        <span slot="activate">⚡ Flash ESP32 Device</span>
+                        <span slot="unsupported">Browser not supported</span>
+                        <span slot="not-allowed">Please enable WebSerial</span>
+                    </esp-web-install-button>
+                </div>
+                
+                <div class="progress-section hidden" id="progressSection">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="status-message" id="statusMessage">Preparing to flash...</div>
+                </div>
             </div>
             
-            <div class="feature-card">
-                <h3>🚀 Release Pipeline Integration</h3>
-                <p>Firmware automatically downloaded from latest GitHub releases. Always uses the most current stable firmware with real-time progress tracking and intelligent error recovery.</p>
+            <div class="steps">
+                <h3>Quick Start Guide</h3>
+                <ol>
+                    <li>Connect your ESP32 board via USB cable</li>
+                    <li>Click the "Flash ESP32 Device" button above</li>
+                    <li>Select your device from the popup</li>
+                    <li>Wait for the flashing process to complete</li>
+                    <li>Follow the post-installation setup steps</li>
+                </ol>
             </div>
             
-            <div class="feature-card">
-                <h3>✅ Professional-Grade Protocol</h3>
-                <p>Uses the same reliable flashing protocol as ESPHome and other professional ESP32 tools. Handles all ESP32 variants and edge cases automatically.</p>
+            <button class="advanced-toggle" onclick="toggleAdvanced()">
+                🔧 Show Advanced Options & Troubleshooting
+            </button>
+            
+            <div class="advanced-content" id="advancedContent">
+                <div class="browser-warning" id="browserWarning" style="display: none;">
+                    <strong>⚠️ Browser Not Supported</strong><br>
+                    Please use Chrome 89+, Edge 89+, or Opera 75+ for device flashing.
+                    <a href="https://www.google.com/chrome/" target="_blank">Download Chrome</a>
+                </div>
+                
+                <h4>Troubleshooting</h4>
+                <details>
+                    <summary>Device not detected?</summary>
+                    <ul>
+                        <li>Use a data cable (not just charging)</li>
+                        <li>Try a different USB port</li>
+                        <li>Put ESP32 in bootloader mode manually</li>
+                        <li>Check cable and connections</li>
+                    </ul>
+                </details>
+                
+                <details>
+                    <summary>Manual bootloader mode</summary>
+                    <ol>
+                        <li>Hold BOOT button on ESP32</li>
+                        <li>While holding BOOT, press EN/RST briefly</li>
+                        <li>Release EN/RST, then release BOOT</li>
+                        <li>Try flashing again</li>
+                    </ol>
+                </details>
+                
+                <details>
+                    <summary>Supported hardware</summary>
+                    <ul>
+                        <li>ESP32-DevKitC (all variants)</li>
+                        <li>ESP32-WROOM-32</li>
+                        <li>NodeMCU-32S</li>
+                        <li>Most ESP32 development boards</li>
+                    </ul>
+                </details>
             </div>
             
-            <div class="feature-card">
-                <h3>🔄 Intelligent Recovery</h3>
-                <p>Automatically detects and handles common flashing issues like chip ID 0x6465 errors. Provides specific troubleshooting guidance and manual bootloader mode instructions.</p>
+            <div class="success-section hidden" id="successSection">
+                <h3>✅ Flash Complete!</h3>
+                <div class="steps">
+                    <h4>Next Steps:</h4>
+                    <ol>
+                        <li>The ESP32 creates WiFi network "Teams Red Light"</li>
+                        <li>Connect with password: "configure"</li>
+                        <li>Open browser to: <code>http://192.168.4.1</code></li>
+                        <li>Configure WiFi and Teams settings</li>
+                        <li>Enjoy automatic status indication!</li>
+                    </ol>
+                </div>
+                <a href="#" class="btn" onclick="location.reload()">Flash Another Device</a>
             </div>
-        </div>
-        
-        <div class="next-steps">
-            <h3>📱 Next Steps After Flashing</h3>
-            <ol>
-                <li><strong>WiFi Setup:</strong> The ESP32 will create a WiFi network called "Teams Red Light"</li>
-                <li><strong>Connect:</strong> Connect to this network using password "configure"</li>
-                <li><strong>Configure:</strong> Open a browser and go to <code>http://192.168.4.1</code></li>
-                <li><strong>Setup:</strong> Configure your WiFi credentials and Microsoft Teams settings</li>
-                <li><strong>Deploy:</strong> Mount the device near your workspace and enjoy automatic status indication!</li>
-            </ol>
         </div>
         
         <div class="footer">
-            <p>
-                <strong>Teams Red Light</strong> - An open source Microsoft Teams status indicator for ESP32<br>
-                <a href="https://github.com/fchapleau/teams-redlight" target="_blank">📦 View on GitHub</a> | 
-                <a href="https://github.com/fchapleau/teams-redlight/issues" target="_blank">🐛 Report Issues</a> | 
-                <a href="https://github.com/fchapleau/teams-redlight/blob/main/README.md" target="_blank">📖 Documentation</a>
-            </p>
-            <p style="font-size: 0.9em; margin-top: 15px;">
-                Powered by <a href="https://esphome.github.io/esp-web-tools/" target="_blank">ESP Web Tools</a>
-            </p>
+            <a href="https://github.com/fchapleau/teams-redlight" target="_blank">📦 GitHub</a> | 
+            <a href="https://github.com/fchapleau/teams-redlight/issues" target="_blank">🐛 Issues</a> | 
+            <a href="https://github.com/fchapleau/teams-redlight/blob/main/README.md" target="_blank">📖 Docs</a>
+            <br><small>Powered by ESP Web Tools</small>
         </div>
     </div>
 
     <script>
-        // Check for WebSerial support and provide helpful feedback
-        if (!("serial" in navigator)) {
-            const button = document.querySelector('esp-web-install-button');
-            if (button) {
-                button.setAttribute('hide-if-unsupported', '');
-            }
+        // Progressive disclosure toggle
+        function toggleAdvanced() {
+            const content = document.getElementById('advancedContent');
+            const button = document.querySelector('.advanced-toggle');
             
-            // Show browser upgrade message
-            const heroSection = document.querySelector('.hero-section');
-            heroSection.innerHTML = `
-                <h2>🚫 Browser Not Supported</h2>
-                <p>Your browser doesn't support the WebSerial API required for ESP32 flashing.</p>
-                <p><strong>Please use:</strong> Chrome 89+, Edge 89+, or Opera 75+</p>
-                <div style="margin-top: 20px;">
-                    <a href="https://www.google.com/chrome/" style="color: white; text-decoration: underline;">Download Chrome</a> | 
-                    <a href="https://www.microsoft.com/edge/" style="color: white; text-decoration: underline;">Download Edge</a>
-                </div>
-            `;
+            if (content.classList.contains('show')) {
+                content.classList.remove('show');
+                button.textContent = '🔧 Show Advanced Options & Troubleshooting';
+            } else {
+                content.classList.add('show');
+                button.textContent = '🔧 Hide Advanced Options';
+            }
         }
-
-        // Add event listeners for ESP Web Tools events
-        // State management for flashing process
+        
+        // Check for WebSerial support
+        function checkBrowserSupport() {
+            if (!("serial" in navigator)) {
+                const warning = document.getElementById('browserWarning');
+                const button = document.querySelector('esp-web-install-button');
+                
+                warning.style.display = 'block';
+                if (button) {
+                    button.setAttribute('hide-if-unsupported', '');
+                }
+                
+                // Update device status
+                const deviceStatus = document.getElementById('deviceStatus');
+                deviceStatus.className = 'device-status error';
+                deviceStatus.innerHTML = '<strong>Browser Not Supported</strong><br>Please use Chrome, Edge, or Opera for device flashing';
+            }
+        }
+        
+        // ESP Web Tools event handlers
         let flashingState = {
             attempts: 0,
             maxAttempts: 3,
-            isInProgress: false,
-            currentStep: 'idle'
+            isInProgress: false
         };
-
-        // Enhanced connection handler with bootloader detection
+        
         document.addEventListener('esp-web-install-button-connect', (event) => {
             console.log('ESP32 Connected:', event.detail);
-            flashingState.currentStep = 'connected';
-            
-            // Update UI to show connection status
-            const heroSection = document.querySelector('.hero-section');
-            heroSection.innerHTML = `
-                <h2>🔗 ESP32 Connected</h2>
-                <p>Device connected successfully. Preparing for firmware installation...</p>
-                <div style="margin-top: 20px;">
-                    <div style="display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: white; animation: spin 1s ease-in-out infinite;"></div>
-                    <span style="margin-left: 10px;">Establishing communication...</span>
-                </div>
-            `;
+            const deviceStatus = document.getElementById('deviceStatus');
+            deviceStatus.className = 'device-status';
+            deviceStatus.innerHTML = '<strong>🔗 Device Connected</strong><br>Preparing for firmware installation...';
         });
-
-        document.addEventListener('esp-web-install-button-disconnect', (event) => {
-            console.log('ESP32 Disconnected:', event.detail);
-            flashingState.currentStep = 'disconnected';
-        });
-
+        
         document.addEventListener('esp-web-install-button-install-start', (event) => {
             console.log('Flashing Started:', event.detail);
             flashingState.isInProgress = true;
             flashingState.attempts++;
-            flashingState.currentStep = 'flashing';
             
-            // Show progress UI
-            const heroSection = document.querySelector('.hero-section');
-            heroSection.innerHTML = `
-                <h2>⚡ Flashing ESP32</h2>
-                <p>Installing Teams Red Light firmware (Attempt ${flashingState.attempts}/${flashingState.maxAttempts})...</p>
-                <div style="margin-top: 20px;">
-                    <div style="width: 100%; background: rgba(255,255,255,0.2); border-radius: 10px; overflow: hidden;">
-                        <div id="progressBar" style="width: 0%; background: white; height: 20px; border-radius: 10px; transition: width 0.3s ease;"></div>
-                    </div>
-                    <p style="margin-top: 10px; font-size: 0.9em;">Please do not disconnect the device during flashing...</p>
-                </div>
-            `;
+            // Show progress section
+            const progressSection = document.getElementById('progressSection');
+            const deviceStatus = document.getElementById('deviceStatus');
+            
+            progressSection.classList.remove('hidden');
+            deviceStatus.className = 'device-status';
+            deviceStatus.innerHTML = `<strong>⚡ Flashing in Progress</strong><br>Attempt ${flashingState.attempts}/${flashingState.maxAttempts} - Please wait...`;
         });
-
+        
         document.addEventListener('esp-web-install-button-install-progress', (event) => {
-            console.log('Flashing Progress:', event.detail);
+            const progress = event.detail;
+            const progressFill = document.getElementById('progressFill');
+            const statusMessage = document.getElementById('statusMessage');
             
-            // Update progress bar if available
-            const progressBar = document.getElementById('progressBar');
-            if (progressBar && event.detail && event.detail.percentage !== undefined) {
-                progressBar.style.width = `${event.detail.percentage}%`;
+            if (progress && progress.percentage !== undefined) {
+                progressFill.style.width = progress.percentage + '%';
+                statusMessage.textContent = `Installing firmware... ${Math.round(progress.percentage)}%`;
             }
         });
-
+        
         document.addEventListener('esp-web-install-button-install-complete', (event) => {
             console.log('Flashing Complete:', event.detail);
             flashingState.isInProgress = false;
-            flashingState.currentStep = 'complete';
             
-            // Show success message
-            const heroSection = document.querySelector('.hero-section');
-            heroSection.innerHTML = `
-                <h2>✅ Flashing Complete!</h2>
-                <p>Your ESP32 has been successfully flashed with Teams Red Light firmware.</p>
-                <p>The device will restart automatically. Follow the "Next Steps" below to complete setup.</p>
-                
-                <div style="background: rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; margin: 20px 0; text-align: left;">
-                    <h4 style="margin-top: 0; color: #ffc107;">⚠️ If Your ESP32 Won't Boot After Flashing</h4>
-                    <p>If you see errors like "invalid header: 0xffffffff" or boot failures, this indicates incomplete firmware flashing.</p>
-                    <p><strong>Solutions:</strong></p>
-                    <ul style="margin: 10px 0; padding-left: 20px;">
-                        <li>Make sure you're using the latest firmware (version 1.0.8+) which includes complete bootloader</li>
-                        <li>Try flashing again - the new firmware includes all required ESP32 components</li>
-                        <li>If still failing, try holding BOOT button during the entire flash process</li>
-                        <li>Check that your USB cable supports data transfer (not just charging)</li>
-                    </ul>
-                    <p>The latest firmware now includes bootloader, partition table, and application in one complete package.</p>
-                </div>
-                
-                <div style="margin-top: 20px;">
-                    <button onclick="location.reload()" style="background: rgba(255,255,255,0.2); border: 2px solid white; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 16px;">
-                        Flash Another Device
-                    </button>
-                </div>
-            `;
+            // Hide progress, show success
+            const progressSection = document.getElementById('progressSection');
+            const flashSection = document.querySelector('.flash-section');
+            const successSection = document.getElementById('successSection');
             
-            // Reset state
-            flashingState.attempts = 0;
+            progressSection.classList.add('hidden');
+            flashSection.style.display = 'none';
+            successSection.classList.remove('hidden');
         });
-
-        // Enhanced error handler with specific chip ID 0x6465 detection
+        
         document.addEventListener('esp-web-install-button-error', (event) => {
             console.error('Flashing Error:', event.detail);
             flashingState.isInProgress = false;
             
-            const errorMessage = event.detail.message || 'Unknown error';
-            const isChipIdError = errorMessage.includes('6465') || errorMessage.includes('wrong chip id');
-            const isBootloaderError = errorMessage.includes('bootloader') || errorMessage.includes('Failed to connect');
+            const deviceStatus = document.getElementById('deviceStatus');
+            const progressSection = document.getElementById('progressSection');
             
-            let troubleshootingSteps = [];
+            progressSection.classList.add('hidden');
+            deviceStatus.className = 'device-status error';
+            
+            let errorMessage = event.detail.message || 'Unknown error occurred';
             let retryButton = '';
-            let specificGuidance = '';
             
-            if (isChipIdError) {
-                specificGuidance = `
-                    <div style="background: rgba(255,193,7,0.2); border: 1px solid rgba(255,193,7,0.5); border-radius: 8px; padding: 15px; margin: 15px 0;">
-                        <h4 style="color: #856404; margin-top: 0;">🔧 Chip ID 0x6465 Error Detected</h4>
-                        <p>This error occurs when the ESP32 is not properly in bootloader mode. The ESP32 needs to be manually put into download mode.</p>
-                    </div>
-                `;
-                
-                troubleshootingSteps = [
-                    'Disconnect and reconnect the USB cable',
-                    'Hold the BOOT button down (do not release yet)',
-                    'While holding BOOT, briefly press and release the EN/RST button',
-                    'Release the BOOT button after 1-2 seconds',
-                    'Click "Try Manual Bootloader Mode" below immediately',
-                    'If still failing, try a different USB cable or port'
-                ];
-                
-                retryButton = `
-                    <button onclick="handleManualBootloaderMode()" style="background: #ffc107; color: #212529; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 16px; margin-right: 10px;">
-                        Try Manual Bootloader Mode
-                    </button>
-                `;
-            } else if (isBootloaderError) {
-                specificGuidance = `
-                    <div style="background: rgba(220,53,69,0.2); border: 1px solid rgba(220,53,69,0.5); border-radius: 8px; padding: 15px; margin: 15px 0;">
-                        <h4 style="color: #721c24; margin-top: 0;">📱 Bootloader Connection Failed</h4>
-                        <p>Could not establish communication with the ESP32 bootloader.</p>
-                    </div>
-                `;
-                
-                troubleshootingSteps = [
-                    'Check USB cable connection (use a data cable, not charge-only)',
-                    'Try a different USB port',
-                    'Install or update ESP32 drivers',
-                    'Close other applications that might be using the serial port',
-                    'Try manual bootloader mode (see instructions above)'
-                ];
-            } else {
-                troubleshootingSteps = [
-                    'Check USB cable connection',
-                    'Try a different USB port',
-                    'Ensure ESP32 drivers are installed',
-                    'Close other applications using the serial port',
-                    'Try manual bootloader mode: Hold BOOT, press EN/RST, release EN/RST, release BOOT'
-                ];
+            if (flashingState.attempts < flashingState.maxAttempts) {
+                retryButton = '<br><br><button class="btn" onclick="location.reload()">Try Again</button>';
             }
             
-            // Show enhanced error message with specific guidance
-            const heroSection = document.querySelector('.hero-section');
-            heroSection.innerHTML = `
-                <h2>❌ Flashing Failed</h2>
-                <p>An error occurred during flashing: <strong>${errorMessage}</strong></p>
-                
-                ${specificGuidance}
-                
-                <div style="margin-top: 20px; text-align: left; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;">
-                    <strong>Troubleshooting Steps:</strong>
-                    <ol style="margin: 10px 0; padding-left: 20px;">
-                        ${troubleshootingSteps.map(step => `<li style="margin: 8px 0;">${step}</li>`).join('')}
-                    </ol>
-                </div>
-                
-                <div style="margin-top: 20px;">
-                    ${retryButton}
-                    <button onclick="location.reload()" style="background: rgba(255,255,255,0.2); border: 2px solid white; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 16px;">
-                        Start Over
-                    </button>
-                </div>
-            `;
+            deviceStatus.innerHTML = `<strong>❌ Flashing Failed</strong><br>${errorMessage}${retryButton}`;
+            
+            // Auto-show advanced options for troubleshooting
+            const advancedContent = document.getElementById('advancedContent');
+            const advancedButton = document.querySelector('.advanced-toggle');
+            if (!advancedContent.classList.contains('show')) {
+                toggleAdvanced();
+            }
         });
-
-        // Function to handle manual bootloader mode guidance
-        function handleManualBootloaderMode() {
-            const heroSection = document.querySelector('.hero-section');
-            heroSection.innerHTML = `
-                <h2>🔧 Manual Bootloader Mode</h2>
-                <p>Follow these steps carefully to put your ESP32 into bootloader mode:</p>
-                
-                <div style="background: rgba(255,193,7,0.2); border: 1px solid rgba(255,193,7,0.5); border-radius: 8px; padding: 20px; margin: 20px 0; text-align: left;">
-                    <h4 style="color: #856404; margin-top: 0;">📋 Step-by-Step Instructions:</h4>
-                    <ol style="margin: 15px 0; padding-left: 25px; line-height: 1.8;">
-                        <li><strong>Locate the buttons:</strong> Find the BOOT and EN/RST buttons on your ESP32</li>
-                        <li><strong>Press and hold BOOT:</strong> Press and keep holding the BOOT button</li>
-                        <li><strong>Press EN/RST briefly:</strong> While holding BOOT, quickly press and release EN/RST</li>
-                        <li><strong>Release BOOT:</strong> Wait 1-2 seconds, then release the BOOT button</li>
-                        <li><strong>Click "Flash Now":</strong> Immediately click the button below to start flashing</li>
-                    </ol>
-                    
-                    <div style="background: rgba(255,255,255,0.3); padding: 10px; border-radius: 5px; margin-top: 15px;">
-                        <strong>💡 Tip:</strong> The ESP32 should now be in bootloader mode and ready for flashing. 
-                        You have about 10 seconds to initiate the flash after entering bootloader mode.
-                    </div>
-                </div>
-                
-                <div style="margin-top: 20px;">
-                    <esp-web-install-button 
-                        manifest="./manifest.json"
-                        install-supported
-                        style="--esp-tools-button-color: #28a745; --esp-tools-button-text-color: white; font-size: 16px; padding: 12px 24px; border-radius: 8px; margin-right: 10px;">
-                        <span slot="activate">🚀 Flash Now (Bootloader Mode)</span>
-                        <span slot="unsupported">Browser not supported</span>
-                        <span slot="not-allowed">Please enable WebSerial</span>
-                    </esp-web-install-button>
-                    
-                    <button onclick="location.reload()" style="background: rgba(255,255,255,0.2); border: 2px solid white; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 16px;">
-                        Start Over
-                    </button>
-                </div>
-            `;
-        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkBrowserSupport();
+        });
     </script>
 </body>
 </html>
