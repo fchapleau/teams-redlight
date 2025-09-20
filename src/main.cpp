@@ -1670,7 +1670,6 @@ bool pollDeviceCodeToken() {
   
   String postData = "grant_type=urn:ietf:params:oauth:grant-type:device_code";
   postData += "&client_id=" + clientId;
-  postData += "&client_secret=" + clientSecret;
   postData += "&device_code=" + deviceCode;
   
   int httpCode = http.POST(postData);
