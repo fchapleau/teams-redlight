@@ -136,11 +136,10 @@ jobs:
         
         echo "✅ Documentation validation passed"
 
-  # Firmware build job - only runs when PlatformIO registry domains are accessible
+  # Firmware build job - must succeed for pipeline to continue
   build-firmware:
     runs-on: ubuntu-latest
     needs: validate
-    continue-on-error: true  # Allow this to fail due to DNS blocks
     
     steps:
     - uses: actions/checkout@v4
@@ -177,15 +176,10 @@ jobs:
     - name: Build firmware
       run: |
         echo "Building ESP32 firmware..."
-        pio run -e esp32dev || echo "Build failed - may be due to network restrictions"
-        pio run -e esp32dev_debug || echo "Debug build failed - may be due to network restrictions"
-        pio run -e esp32dev_web || echo "Web build failed - may be due to network restrictions"
-    
-    - name: Skip firmware build (PlatformIO not accessible)
-      run: |
-        echo "Skipping firmware build - PlatformIO registry not accessible"
-        echo "Only real firmware should be built, not mock/demonstration files"
-        echo "Web flasher will use in-memory placeholder for demonstration purposes"
+        pio run -e esp32dev
+        pio run -e esp32dev_debug
+        pio run -e esp32dev_web
+
     
     - name: Prepare release files
       run: |
