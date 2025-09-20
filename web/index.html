@@ -469,6 +469,97 @@
             margin-bottom: 15px;
         }
 
+        /* Status display styles */
+        .status-display {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border: 1px solid #28a745;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none; /* Hidden by default, shown when device is connected */
+        }
+
+        .status-display.connected {
+            display: block;
+        }
+
+        .status-display h3 {
+            color: #28a745;
+            margin-top: 0;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .status-card {
+            background: white;
+            border-radius: 6px;
+            padding: 12px;
+            border-left: 4px solid #28a745;
+        }
+
+        .status-card h4 {
+            margin: 0 0 8px 0;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .status-value {
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        .presence-available { color: #28a745; }
+        .presence-busy { color: #ffc107; }
+        .presence-meeting { color: #dc3545; }
+        .presence-away { color: #6c757d; }
+        .presence-offline { color: #6c757d; }
+
+        .led-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .led-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .led-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .led-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+        }
+
+        .led-indicator.off {
+            background: #6c757d;
+        }
+
+        @media (max-width: 600px) {
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .main-actions {
             background: #fff;
             border: 2px solid #d73502;
@@ -725,6 +816,31 @@
                 </div>
             </div>
             
+            <!-- Device Status Display (shown when device is connected) -->
+            <div class="status-display" id="deviceStatusDisplay">
+                <h3>🔗 Device Status</h3>
+                <div class="status-grid">
+                    <div class="status-card">
+                        <h4>Teams Presence</h4>
+                        <div class="status-value" id="userPresence">Checking...</div>
+                    </div>
+                    <div class="status-card">
+                        <h4>Device Info</h4>
+                        <div style="font-size: 12px;">
+                            <div>State: <span class="status-value" id="deviceState">-</span></div>
+                            <div>IP: <span id="deviceIP">-</span></div>
+                            <div>Uptime: <span id="deviceUptime">-</span></div>
+                        </div>
+                    </div>
+                    <div class="status-card" style="grid-column: 1 / -1;">
+                        <h4>LED Status (<span id="ledCount">0</span> configured)</h4>
+                        <div class="led-list" id="ledList">
+                            <div style="text-align: center; color: #6c757d; font-style: italic;">No LEDs configured</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <div class="steps">
                 <h3>Quick Start Guide</h3>
                 <ol>
@@ -835,7 +951,130 @@
                 deviceStatus.innerHTML = '<strong>Browser Not Supported</strong><br>Please use Chrome, Edge, or Opera for device flashing';
             }
         }
+
+        // Device status checking functionality
+        let statusCheckInterval = null;
         
+        async function checkDeviceStatus() {
+            try {
+                // Try to detect if we're on the device's network (192.168.4.x or same origin)
+                const currentURL = new URL(window.location.href);
+                let deviceIP = null;
+                
+                // If we're on localhost or device IP, try to fetch status
+                if (currentURL.hostname === 'localhost' || 
+                    currentURL.hostname.startsWith('192.168.4.') ||
+                    currentURL.hostname.startsWith('192.168.')) {
+                    deviceIP = currentURL.hostname + ':' + (currentURL.port || '80');
+                } else {
+                    // Try common device IP
+                    deviceIP = '192.168.4.1:80';
+                }
+                
+                const response = await fetch(`http://${deviceIP}/status`);
+                if (response.ok) {
+                    const status = await response.json();
+                    updateStatusDisplay(status);
+                    return true;
+                }
+            } catch (error) {
+                console.log('Device not accessible:', error);
+            }
+            
+            hideStatusDisplay();
+            return false;
+        }
+        
+        function updateStatusDisplay(status) {
+            const statusDisplay = document.getElementById('deviceStatusDisplay');
+            const userPresence = document.getElementById('userPresence');
+            const deviceState = document.getElementById('deviceState');
+            const deviceIP = document.getElementById('deviceIP');
+            const deviceUptime = document.getElementById('deviceUptime');
+            const ledCount = document.getElementById('ledCount');
+            const ledList = document.getElementById('ledList');
+            
+            // Show the status display
+            statusDisplay.classList.add('connected');
+            
+            // Update user presence
+            if (status.presence) {
+                userPresence.textContent = status.presence;
+                userPresence.className = 'status-value presence-' + status.presence.toLowerCase().replace(' ', '-');
+            } else {
+                userPresence.textContent = 'Not monitoring';
+                userPresence.className = 'status-value';
+            }
+            
+            // Update device info
+            deviceState.textContent = status.state || 'Unknown';
+            deviceIP.textContent = status.ip_address || 'Not connected';
+            
+            if (status.uptime) {
+                const hours = Math.floor(status.uptime / 3600);
+                const minutes = Math.floor((status.uptime % 3600) / 60);
+                deviceUptime.textContent = `${hours}h ${minutes}m`;
+            } else {
+                deviceUptime.textContent = 'Unknown';
+            }
+            
+            // Update LED status
+            if (status.leds && status.leds.length > 0) {
+                ledCount.textContent = status.led_count || status.leds.length;
+                ledList.innerHTML = '';
+                
+                status.leds.forEach(led => {
+                    const ledItem = document.createElement('div');
+                    ledItem.className = 'led-item';
+                    
+                    let currentPattern = 'Off';
+                    if (status.presence === 'Busy') {
+                        currentPattern = led.call_pattern;
+                    } else if (status.presence === 'In Meeting') {
+                        currentPattern = led.meeting_pattern;
+                    } else {
+                        currentPattern = led.available_pattern;
+                    }
+                    
+                    ledItem.innerHTML = `
+                        <span>LED ${led.id + 1} (GPIO ${led.pin})</span>
+                        <div class="led-status">
+                            <span>${currentPattern}</span>
+                            <div class="led-indicator ${led.current_state ? '' : 'off'}"></div>
+                        </div>
+                    `;
+                    ledList.appendChild(ledItem);
+                });
+            } else {
+                ledCount.textContent = '0';
+                ledList.innerHTML = '<div style="text-align: center; color: #6c757d; font-style: italic;">No LEDs configured</div>';
+            }
+        }
+        
+        function hideStatusDisplay() {
+            const statusDisplay = document.getElementById('deviceStatusDisplay');
+            statusDisplay.classList.remove('connected');
+        }
+        
+        function startStatusMonitoring() {
+            // Check status immediately
+            checkDeviceStatus();
+            
+            // Then check every 10 seconds
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+            statusCheckInterval = setInterval(checkDeviceStatus, 10000);
+        }
+        
+        function stopStatusMonitoring() {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+            }
+            hideStatusDisplay();
+        }
+
         // ESP Web Tools event handlers
         let flashingState = {
             attempts: 0,
@@ -916,9 +1155,26 @@
             }
         });
         
+        // Fetch and display version from manifest
+        async function loadVersionInfo() {
+            try {
+                // Add cache-busting parameter to force refresh of manifest
+                const cacheBuster = new Date().getTime();
+                const response = await fetch(`./manifest.json?v=${cacheBuster}`);
+                const manifest = await response.json();
+                const deviceStatus = document.getElementById('deviceStatus');
+                const currentContent = deviceStatus.innerHTML;
+                deviceStatus.innerHTML = currentContent + `<br><small>Firmware Version: ${manifest.version}</small>`;
+            } catch (error) {
+                console.warn('Could not load version info:', error);
+            }
+        }
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             checkBrowserSupport();
+            loadVersionInfo();
+            startStatusMonitoring();
         });
     </script>
 </body>
