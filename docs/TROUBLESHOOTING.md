@@ -137,9 +137,9 @@ This ensures that:
 **Teams presence API returns HTTP -1 errors**
 1. **SSL/TLS Connection Issues:** HTTP -1 typically indicates connection failure rather than HTTP status
    - Root cause: Missing SSL configuration for HTTPS requests to Microsoft APIs
-   - **Fixed in latest version:** Added `setInsecure()` to all HTTPS calls for IoT compatibility
+   - **Fixed in latest version:** Added `WiFiClientSecure.setInsecure()` to all HTTPS calls for IoT compatibility
    - For older versions: Update firmware to latest release
-   - Manual fix: Add `http.setInsecure();` after `http.begin()` for all HTTPS URLs
+   - Manual fix: Use `WiFiClientSecure secureClient; secureClient.setInsecure(); http.begin(secureClient, url);` for HTTPS URLs
 
 **Authentication fails**
 1. Verify Azure AD application configuration:
