@@ -1,8 +1,10 @@
 #include "logging.h"
 #include <cstdarg>
+#include <ArduinoJson.h>
 
 // Static member initialization
 int Logger::currentLevel = LOG_LEVEL;
+LogBuffer Logger::logBuffer;
 
 void Logger::begin(unsigned long baudRate) {
     Serial.begin(baudRate);
@@ -108,6 +110,9 @@ void Logger::printLevel(int level, const char* prefix, const char* color) {
 void Logger::logMessage(int level, const String& component, const String& message) {
     if (currentLevel > level) return;
     
+    // Add to log buffer for web interface
+    logBuffer.addEntry(level, component, message);
+    
     printTimestamp();
     
     switch (level) {
@@ -154,5 +159,69 @@ void Logger::logMessagef(int level, const char* format, va_list args) {
     
     char buffer[512];
     vsnprintf(buffer, sizeof(buffer), format, args);
+    
+    // Add to log buffer for web interface
+    logBuffer.addEntry(level, "", String(buffer));
+    
     Serial.println(buffer);
+}
+
+String Logger::getLogsAsJson() {
+    return logBuffer.getLogsAsJson();
+}
+
+void Logger::clearLogs() {
+    logBuffer.clear();
+}
+
+// LogBuffer implementation
+void LogBuffer::addEntry(int level, const String& component, const String& message) {
+    entries[head].timestamp = millis();
+    entries[head].level = level;
+    entries[head].component = component;
+    entries[head].message = message;
+    
+    head = (head + 1) % LOG_BUFFER_SIZE;
+    if (count < LOG_BUFFER_SIZE) {
+        count++;
+    }
+}
+
+String LogBuffer::getLogsAsJson() const {
+    DynamicJsonDocument doc(4096);
+    JsonArray logs = doc.createNestedArray("logs");
+    
+    int start = (count < LOG_BUFFER_SIZE) ? 0 : head;
+    for (int i = 0; i < count; i++) {
+        int index = (start + i) % LOG_BUFFER_SIZE;
+        JsonObject logEntry = logs.createNestedObject();
+        
+        logEntry["timestamp"] = entries[index].timestamp;
+        logEntry["level"] = getLevelString(entries[index].level);
+        logEntry["component"] = entries[index].component;
+        logEntry["message"] = entries[index].message;
+        
+        // Add relative time for readability
+        unsigned long relativeTime = (millis() - entries[index].timestamp) / 1000;
+        logEntry["relative_time"] = relativeTime;
+    }
+    
+    String result;
+    serializeJson(doc, result);
+    return result;
+}
+
+void LogBuffer::clear() {
+    head = 0;
+    count = 0;
+}
+
+const char* LogBuffer::getLevelString(int level) const {
+    switch (level) {
+        case LOG_LEVEL_DEBUG: return "DEBUG";
+        case LOG_LEVEL_INFO: return "INFO";
+        case LOG_LEVEL_WARN: return "WARN";
+        case LOG_LEVEL_ERROR: return "ERROR";
+        default: return "UNKNOWN";
+    }
 }
