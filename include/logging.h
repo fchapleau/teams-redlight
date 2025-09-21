@@ -28,6 +28,31 @@
 #define LOG_PREFIX_WARN   "[WARN] "
 #define LOG_PREFIX_ERROR  "[ERROR]"
 
+// Log buffer configuration for web interface
+#define LOG_BUFFER_SIZE 50  // Keep last 50 log messages
+
+// Log entry structure for web interface
+struct LogEntry {
+    unsigned long timestamp;
+    int level;
+    String component;
+    String message;
+};
+
+// Circular buffer for recent logs
+class LogBuffer {
+public:
+    void addEntry(int level, const String& component, const String& message);
+    String getLogsAsJson() const;
+    void clear();
+    
+private:
+    LogEntry entries[LOG_BUFFER_SIZE];
+    int head = 0;
+    int count = 0;
+    const char* getLevelString(int level) const;
+};
+
 class Logger {
 public:
     static void begin(unsigned long baudRate = 115200);
@@ -50,9 +75,14 @@ public:
     static void info(const String& component, const String& message);
     static void warn(const String& component, const String& message);
     static void error(const String& component, const String& message);
+    
+    // Web interface support
+    static String getLogsAsJson();
+    static void clearLogs();
 
 private:
     static int currentLevel;
+    static LogBuffer logBuffer;
     static void printTimestamp();
     static void printLevel(int level, const char* prefix, const char* color);
     static void logMessage(int level, const String& component, const String& message);

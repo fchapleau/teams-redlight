@@ -70,6 +70,9 @@ void handleRoot();
 void handleConfig();
 void handleSave();
 void handleStatus();
+void handleLogs();
+void handleSchedule();
+void handleLocation();
 void handleUpdate();
 void handleLogin();
 void handleCallback();
@@ -613,6 +616,27 @@ void setupWebServer() {
   server.on("/status", [](){
     LOG_DEBUG("Serving status API request");
     handleStatus();
+  });
+  
+  server.on("/logs", [](){
+    LOG_DEBUG("Serving logs API request");
+    handleLogs();
+  });
+  
+  server.on("/logs", HTTP_DELETE, [](){
+    LOG_DEBUG("Clearing logs request");
+    Logger::clearLogs();
+    server.send(200, "application/json", "{\"status\":\"cleared\"}");
+  });
+  
+  server.on("/schedule", [](){
+    LOG_DEBUG("Serving schedule API request");
+    handleSchedule();
+  });
+  
+  server.on("/location", [](){
+    LOG_DEBUG("Serving location API request");
+    handleLocation();
   });
   
   server.on("/update", HTTP_POST, [](){
@@ -1369,6 +1393,141 @@ void handleUpdate() {
   // OTA Update functionality - simplified for now
   LOG_WARN("OTA Update not implemented in this version");
   server.send(200, "text/plain", "OTA Update not implemented in this version");
+}
+
+void handleLogs() {
+  LOG_DEBUG("Logs API request received");
+  String logsJson = Logger::getLogsAsJson();
+  server.send(200, "application/json", logsJson);
+}
+
+void handleSchedule() {
+  LOG_DEBUG("Schedule API request received");
+  
+  if (accessToken.length() == 0) {
+    DynamicJsonDocument doc(256);
+    doc["error"] = "No access token available";
+    doc["schedule"] = nullptr;
+    doc["working_hours"] = nullptr;
+    String response;
+    serializeJson(doc, response);
+    server.send(200, "application/json", response);
+    return;
+  }
+  
+  // Get calendar events for today
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure();
+  HTTPClient http;
+  
+  // Get today's date in ISO format
+  time_t now = time(nullptr);
+  struct tm* timeInfo = localtime(&now);
+  char startTime[32], endTime[32];
+  snprintf(startTime, sizeof(startTime), "%04d-%02d-%02dT00:00:00Z", 
+           timeInfo->tm_year + 1900, timeInfo->tm_mon + 1, timeInfo->tm_mday);
+  snprintf(endTime, sizeof(endTime), "%04d-%02d-%02dT23:59:59Z", 
+           timeInfo->tm_year + 1900, timeInfo->tm_mon + 1, timeInfo->tm_mday);
+  
+  String calendarUrl = "https://graph.microsoft.com/v1.0/me/calendarview?startDateTime=" + String(startTime) + "&endDateTime=" + String(endTime) + "&$select=subject,start,end,isAllDay,showAs&$top=10";
+  
+  http.begin(secureClient, calendarUrl);
+  http.addHeader("Authorization", "Bearer " + accessToken);
+  http.addHeader("User-Agent", "TeamsRedLight/1.0");
+  
+  int httpCode = http.GET();
+  DynamicJsonDocument doc(2048);
+  
+  if (httpCode == HTTP_CODE_OK) {
+    String payload = http.getString();
+    DeserializationError error = deserializeJson(doc, payload);
+    
+    if (!error) {
+      LOG_INFO("Successfully retrieved calendar data");
+    } else {
+      LOG_ERRORF("Failed to parse calendar JSON: %s", error.c_str());
+      doc.clear();
+      doc["error"] = "Failed to parse calendar data";
+    }
+  } else {
+    LOG_ERRORF("Calendar request failed with HTTP %d", httpCode);
+    doc["error"] = "Failed to retrieve calendar data";
+    doc["http_code"] = httpCode;
+  }
+  
+  http.end();
+  
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
+}
+
+void handleLocation() {
+  LOG_DEBUG("Location API request received");
+  
+  if (accessToken.length() == 0) {
+    DynamicJsonDocument doc(256);
+    doc["error"] = "No access token available";
+    doc["location"] = "Unknown";
+    String response;
+    serializeJson(doc, response);
+    server.send(200, "application/json", response);
+    return;
+  }
+  
+  // Get user's presence with location information
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure();
+  HTTPClient http;
+  http.begin(secureClient, "https://graph.microsoft.com/v1.0/me/presence");
+  http.addHeader("Authorization", "Bearer " + accessToken);
+  http.addHeader("User-Agent", "TeamsRedLight/1.0");
+  
+  int httpCode = http.GET();
+  DynamicJsonDocument doc(1024);
+  
+  if (httpCode == HTTP_CODE_OK) {
+    String payload = http.getString();
+    DeserializationError error = deserializeJson(doc, payload);
+    
+    if (!error) {
+      // Extract location information if available
+      String availability = doc["availability"].as<String>();
+      String activity = doc["activity"].as<String>();
+      
+      // Infer location based on presence status
+      String location = "Unknown";
+      if (activity == "InAMeeting" || activity == "InACall" || activity == "InAConferenceCall") {
+        location = "In Meeting";
+      } else if (availability == "Available" || availability == "Busy") {
+        location = "Online/Remote";
+      } else if (availability == "Away" || availability == "BeRightBack") {
+        location = "Away";
+      } else if (availability == "Offline") {
+        location = "Offline";
+      }
+      
+      doc["location"] = location;
+      doc["inferred_from"] = "presence";
+      LOG_INFOF("Location inferred as: %s", location.c_str());
+    } else {
+      LOG_ERRORF("Failed to parse presence JSON: %s", error.c_str());
+      doc.clear();
+      doc["error"] = "Failed to parse presence data";
+      doc["location"] = "Unknown";
+    }
+  } else {
+    LOG_ERRORF("Presence request failed with HTTP %d", httpCode);
+    doc["error"] = "Failed to retrieve presence data";
+    doc["location"] = "Unknown";
+    doc["http_code"] = httpCode;
+  }
+  
+  http.end();
+  
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
 }
 
 void handleLogin() {
