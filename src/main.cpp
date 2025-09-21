@@ -2155,6 +2155,7 @@ bool refreshAccessToken() {
   postData += "&client_secret=" + clientSecret;
   postData += "&refresh_token=" + refreshToken;
   postData += "&grant_type=refresh_token";
+  postData += "&scope=" + String(DEVICE_CODE_SCOPE);
   
   LOG_DEBUG("Sending token refresh request...");
   int httpCode = http.POST(postData);
@@ -2205,6 +2206,20 @@ bool refreshAccessToken() {
     String response = http.getString();
     if (response.length() > 0 && response.length() < 200) {
       LOG_DEBUGF("Error response: %s", response.c_str());
+    }
+    
+    // If it's a 401 (Unauthorized), the refresh token is likely invalid/expired
+    if (httpCode == 401) {
+      LOG_WARN("HTTP 401 during token refresh - refresh token may be invalid or expired");
+      LOG_INFO("Clearing stored tokens to force re-authentication");
+      
+      // Clear stored tokens since they're no longer valid
+      preferences.remove(KEY_ACCESS_TOKEN);
+      preferences.remove(KEY_REFRESH_TOKEN);
+      preferences.remove(KEY_TOKEN_EXPIRES);
+      accessToken = "";
+      refreshToken = "";
+      tokenExpires = 0;
     }
   }
   
