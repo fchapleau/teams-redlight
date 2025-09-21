@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <Update.h>
+#include <time.h>
 #include "config.h"
 #include "logging.h"
 
@@ -53,6 +54,17 @@ String verificationUri;
 unsigned long deviceCodeExpires = 0;
 unsigned long lastDeviceCodePoll = 0;
 
+// Time synchronization variables
+unsigned long lastTimeUpdate = 0;
+int timezoneOffset = NTP_TIMEZONE_OFFSET;
+int daylightOffset = NTP_DAYLIGHT_OFFSET;
+bool timeConfigured = false;
+
+// Presence logging variables
+PresenceLogEntry presenceLogs[MAX_PRESENCE_LOGS];
+uint8_t presenceLogCount = 0;
+uint8_t presenceLogIndex = 0;
+
 // Function declarations
 void setupLED();
 void updateLED();
@@ -83,6 +95,13 @@ void checkTeamsPresence();
 bool refreshAccessToken();
 void loadConfiguration();
 void saveConfiguration();
+void setupTime();
+void updateTime();
+String getCurrentTimeString();
+void logPresenceChange(TeamsPresence newPresence);
+void loadPresenceLogs();
+void savePresenceLogs();
+void handlePresenceHistory();
 
 void setup() {
   Logger::begin(115200);
@@ -98,6 +117,10 @@ void setup() {
   LOG_DEBUG("Loading configuration");
   // Load saved configuration
   loadConfiguration();
+  
+  LOG_DEBUG("Loading presence logs");
+  // Load presence logs
+  loadPresenceLogs();
   
   // Check if device code flow was in progress
   if (deviceCode.length() > 0 && deviceCodeExpires > millis()) {
@@ -127,6 +150,11 @@ void loop() {
   
   updateLED();
   
+  // Update time if connected to WiFi
+  if (WiFi.status() == WL_CONNECTED && timeConfigured) {
+    updateTime();
+  }
+  
   // Handle different states
   switch (currentState) {
     case STATE_AP_MODE:
@@ -138,6 +166,12 @@ void loop() {
         LOG_INFO("WiFi connected successfully!");
         LOG_INFOF("IP address: %s", WiFi.localIP().toString().c_str());
         LOG_INFOF("Signal strength: %d dBm", WiFi.RSSI());
+        
+        // Setup time synchronization after WiFi connection
+        if (!timeConfigured) {
+          LOG_DEBUG("Setting up time synchronization");
+          setupTime();
+        }
         
         if (accessToken.length() > 0) {
           LOG_DEBUG("Access token found, transitioning to authenticated state");
@@ -634,6 +668,11 @@ void setupWebServer() {
     handleSchedule();
   });
   
+  server.on("/presence-history", [](){
+    LOG_DEBUG("Serving presence history API request");
+    handlePresenceHistory();
+  });
+  
   server.on("/location", [](){
     LOG_DEBUG("Serving location API request");
     handleLocation();
@@ -743,6 +782,12 @@ void handleRoot() {
   html += "<div id=\"ipAddress\"></div>";
   html += "<div id=\"uptime\"></div>";
   html += "<div id=\"wifiStatus\"></div>";
+  html += "<div id=\"currentTime\"></div>";
+  html += "<div id=\"timezone\"></div>";
+  html += "</div>";
+  html += "<div class=\"device-info\" id=\"presenceHistory\" style=\"display: none; margin-top: 1rem;\">";
+  html += "<div><strong>Recent Presence Changes:</strong></div>";
+  html += "<div id=\"presenceList\" style=\"max-height: 150px; overflow-y: auto; font-size: 0.8rem; margin-top: 0.5rem;\"></div>";
   html += "</div>";
   html += "</div>";
   html += "</div>";
@@ -767,12 +812,24 @@ void handleRoot() {
   html += "statusDiv.className = 'status-card disconnected';";
   html += "statusDiv.innerHTML = '<span class=\"status-icon\">&#x274C;</span><div class=\"status-text\">Disconnected</div><div class=\"status-detail\">' + (data.message || 'Not connected') + '</div>';";
   html += "}";
-  html += "if (data.ip_address || data.uptime || data.wifi_connected !== undefined) {";
+  html += "if (data.ip_address || data.uptime || data.wifi_connected !== undefined || data.time_configured) {";
   html += "deviceInfo.style.display = 'block';";
   html += "document.getElementById('ipAddress').textContent = data.ip_address ? 'IP Address: ' + data.ip_address : '';";
   html += "document.getElementById('uptime').textContent = data.uptime ? 'Uptime: ' + Math.floor(data.uptime / 60) + ' minutes' : '';";
   html += "document.getElementById('wifiStatus').textContent = data.wifi_connected !== undefined ? 'WiFi: ' + (data.wifi_connected ? 'Connected' : 'Disconnected') : '';";
+  html += "if (data.time_configured && data.current_time) {";
+  html += "document.getElementById('currentTime').textContent = 'Time: ' + data.current_time;";
+  html += "const tzOffset = data.timezone_offset || 0;";
+  html += "const dlOffset = data.daylight_offset || 0;";
+  html += "const totalOffset = tzOffset + dlOffset;";
+  html += "const sign = totalOffset >= 0 ? '+' : '';";
+  html += "document.getElementById('timezone').textContent = 'Timezone: UTC' + sign + totalOffset;";
+  html += "} else {";
+  html += "document.getElementById('currentTime').textContent = 'Time: Not synchronized';";
+  html += "document.getElementById('timezone').textContent = 'Timezone: Not configured';";
   html += "}";
+  html += "}";
+  html += "if (data.state === 'monitoring') { loadPresenceHistory(); }";
   html += "}).catch(() => {";
   html += "const statusDiv = document.getElementById('status');";
   html += "statusDiv.className = 'status-card disconnected';";
@@ -788,6 +845,31 @@ void handleRoot() {
   html += "setTimeout(() => location.reload(), 30000);";
   html += "}).catch(() => { alert('Failed to restart device. Please try again.'); });";
   html += "}";
+  html += "}";
+  html += "function loadPresenceHistory() {";
+  html += "fetch('/presence-history').then(response => response.json()).then(data => {";
+  html += "const presenceHistory = document.getElementById('presenceHistory');";
+  html += "const presenceList = document.getElementById('presenceList');";
+  html += "if (data.logs && data.logs.length > 0) {";
+  html += "presenceHistory.style.display = 'block';";
+  html += "presenceList.innerHTML = '';";
+  html += "const recentLogs = data.logs.slice(-10).reverse();";
+  html += "recentLogs.forEach(log => {";
+  html += "const logDiv = document.createElement('div');";
+  html += "logDiv.style.cssText = 'display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #eee; font-size: 0.75rem;';";
+  html += "let presenceColor = '#6c757d';";
+  html += "if (log.presence === 'Available') presenceColor = '#28a745';";
+  html += "else if (log.presence === 'Busy') presenceColor = '#ffc107';";
+  html += "else if (log.presence === 'In Meeting') presenceColor = '#dc3545';";
+  html += "else if (log.presence === 'Away') presenceColor = '#6c757d';";
+  html += "else if (log.presence === 'Offline') presenceColor = '#6c757d';";
+  html += "logDiv.innerHTML = '<span style=\"color: ' + presenceColor + ';\">' + log.presence + '</span><span style=\"color: #6c757d;\">' + log.timestamp + '</span>';";
+  html += "presenceList.appendChild(logDiv);";
+  html += "});";
+  html += "} else {";
+  html += "presenceHistory.style.display = 'none';";
+  html += "}";
+  html += "}).catch(() => { presenceHistory.style.display = 'none'; });";
   html += "}";
   html += "checkStatus(); setInterval(checkStatus, 10000);";
   html += "</script>";
@@ -1383,6 +1465,18 @@ void handleStatus() {
     led["offline_pattern"] = getPatternName(leds[i].offlinePattern);
   }
   
+  // Add time information
+  doc["time_configured"] = timeConfigured;
+  if (timeConfigured) {
+    doc["current_time"] = getCurrentTimeString();
+    doc["timezone_offset"] = timezoneOffset;
+    doc["daylight_offset"] = daylightOffset;
+  }
+  
+  // Add presence logging info
+  doc["presence_logs_count"] = presenceLogCount;
+  doc["max_presence_logs"] = MAX_PRESENCE_LOGS;
+  
   String response;
   serializeJson(doc, response);
   server.send(200, "application/json", response);
@@ -1688,7 +1782,14 @@ void handleCallback() {
         accessToken = doc["access_token"].as<String>();
         refreshToken = doc["refresh_token"].as<String>();
         unsigned long expiresIn = doc["expires_in"].as<unsigned long>();
-        tokenExpires = millis() + (expiresIn * 1000);
+        
+        // Store absolute expiry time instead of millis() based time
+        if (timeConfigured) {
+          tokenExpires = time(nullptr) + expiresIn;
+        } else {
+          // Fallback to millis() if time not configured yet
+          tokenExpires = millis() / 1000 + expiresIn;
+        }
         
         LOG_INFO("OAuth authentication successful!");
         LOG_INFOF("Access token length: %d", accessToken.length());
@@ -1858,7 +1959,14 @@ bool pollDeviceCodeToken() {
       accessToken = doc["access_token"].as<String>();
       refreshToken = doc["refresh_token"].as<String>();
       unsigned long expiresIn = doc["expires_in"].as<unsigned long>();
-      tokenExpires = millis() + (expiresIn * 1000);
+      
+      // Store absolute expiry time instead of millis() based time
+      if (timeConfigured) {
+        tokenExpires = time(nullptr) + expiresIn;
+      } else {
+        // Fallback to millis() if time not configured yet
+        tokenExpires = millis() / 1000 + expiresIn;
+      }
       
       LOG_INFO("Device code authentication successful!");
       LOG_INFOF("Access token length: %d", accessToken.length());
@@ -1973,7 +2081,14 @@ bool pollDeviceCodeTokenWithSecret() {
       accessToken = doc["access_token"].as<String>();
       refreshToken = doc["refresh_token"].as<String>();
       unsigned long expiresIn = doc["expires_in"].as<unsigned long>();
-      tokenExpires = millis() + (expiresIn * 1000);
+      
+      // Store absolute expiry time instead of millis() based time
+      if (timeConfigured) {
+        tokenExpires = time(nullptr) + expiresIn;
+      } else {
+        // Fallback to millis() if time not configured yet
+        tokenExpires = millis() / 1000 + expiresIn;
+      }
       
       LOG_INFO("Device code authentication with secret successful!");
       LOG_INFOF("Access token length: %d", accessToken.length());
@@ -2039,12 +2154,16 @@ void checkTeamsPresence() {
   }
   
   // Check if token needs refresh
-  if (millis() > tokenExpires - 300000) { // Refresh 5 minutes before expiry
-    LOG_INFO("Access token expiring soon, attempting refresh...");
-    if (!refreshAccessToken()) {
-      LOG_ERROR("Token refresh failed, switching to OAuth state");
-      currentState = STATE_CONNECTING_OAUTH;
-      return;
+  if (tokenExpires > 0) {
+    time_t currentTime = timeConfigured ? time(nullptr) : (millis() / 1000);
+    // Refresh token if it expires within 5 minutes (300 seconds)
+    if (currentTime >= tokenExpires - 300) {
+      LOG_INFOF("Access token expiring soon (in %ld seconds), attempting refresh...", tokenExpires - currentTime);
+      if (!refreshAccessToken()) {
+        LOG_ERROR("Token refresh failed, switching to OAuth state");
+        currentState = STATE_CONNECTING_OAUTH;
+        return;
+      }
     }
   }
   
@@ -2109,6 +2228,10 @@ void checkTeamsPresence() {
       
       LOG_INFOF("Teams presence changed: %s (was %s)", presenceStr, 
                currentPresence == PRESENCE_UNKNOWN ? "Unknown" : "different");
+      
+      // Log presence change persistently
+      logPresenceChange(newPresence);
+      
       currentPresence = newPresence;
     } else {
       LOG_DEBUG("Teams presence unchanged");
@@ -2181,7 +2304,14 @@ bool refreshAccessToken() {
         LOG_DEBUG("New refresh token received");
       }
       unsigned long expiresIn = doc["expires_in"].as<unsigned long>();
-      tokenExpires = millis() + (expiresIn * 1000);
+      
+      // Store absolute expiry time instead of millis() based time
+      if (timeConfigured) {
+        tokenExpires = time(nullptr) + expiresIn;
+      } else {
+        // Fallback to millis() if time not configured yet
+        tokenExpires = millis() / 1000 + expiresIn;
+      }
       
       LOG_INFO("Token refresh successful!");
       LOG_INFOF("New access token length: %d", accessToken.length());
@@ -2246,6 +2376,10 @@ void loadConfiguration() {
   verificationUri = preferences.getString(KEY_VERIFICATION_URI, "");
   deviceCodeExpires = preferences.getULong64(KEY_DEVICE_CODE_EXPIRES, 0);
   
+  // Load time configuration
+  timezoneOffset = preferences.getInt(KEY_TIMEZONE_OFFSET, NTP_TIMEZONE_OFFSET);
+  daylightOffset = preferences.getInt(KEY_DAYLIGHT_OFFSET, NTP_DAYLIGHT_OFFSET);
+  
   // Load LED pattern preferences (legacy for backward compatibility)
   callPattern = (LEDPattern)preferences.getUInt("call_pattern", DEFAULT_CALL_PATTERN);
   meetingPattern = (LEDPattern)preferences.getUInt(KEY_MEETING_PATTERN, DEFAULT_MEETING_PATTERN);
@@ -2295,6 +2429,8 @@ void loadConfiguration() {
   LOG_INFOF("Call LED Pattern: %d", callPattern);
   LOG_INFOF("Meeting LED Pattern: %d", meetingPattern);
   LOG_INFOF("Available LED Pattern: %d", availablePattern);
+  LOG_INFOF("Timezone Offset: %d hours", timezoneOffset);
+  LOG_INFOF("Daylight Offset: %d hours", daylightOffset);
   LOG_INFOF("LED Count: %d", ledCount);
   for (uint8_t i = 0; i < ledCount; i++) {
     LOG_INFOF("LED %d: GPIO %d, Call: %d, Meeting: %d, Available: %d, Away: %d, Offline: %d", 
@@ -2302,7 +2438,8 @@ void loadConfiguration() {
   }
   
   if (tokenExpires > 0) {
-    long timeToExpiry = (long)(tokenExpires - millis()) / 1000;
+    time_t currentTime = timeConfigured ? time(nullptr) : (millis() / 1000);
+    long timeToExpiry = (long)(tokenExpires - currentTime);
     if (timeToExpiry > 0) {
       LOG_INFOF("Token expires in: %ld seconds", timeToExpiry);
     } else {
@@ -2325,6 +2462,10 @@ void saveConfiguration() {
   preferences.putString(KEY_ACCESS_TOKEN, accessToken);
   preferences.putString(KEY_REFRESH_TOKEN, refreshToken);
   preferences.putULong64(KEY_TOKEN_EXPIRES, tokenExpires);
+  
+  // Save time configuration
+  preferences.putInt(KEY_TIMEZONE_OFFSET, timezoneOffset);
+  preferences.putInt(KEY_DAYLIGHT_OFFSET, daylightOffset);
   
   // Save LED pattern preferences (legacy for backward compatibility)
   preferences.putUInt("call_pattern", callPattern);
@@ -2355,5 +2496,174 @@ void saveConfiguration() {
 void restartESP() {
   LOG_WARN("Device restart requested");
   ESP.restart();
+}
+
+void setupTime() {
+  LOG_INFO("Configuring time synchronization");
+  
+  // Configure NTP
+  configTime(timezoneOffset * 3600, daylightOffset * 3600, NTP_SERVER);
+  
+  // Wait for time to be set
+  LOG_DEBUG("Waiting for NTP time sync...");
+  time_t now = time(nullptr);
+  int attempts = 0;
+  while (now < 1000000000 && attempts < 20) { // Wait until we have a reasonable timestamp
+    delay(500);
+    now = time(nullptr);
+    attempts++;
+  }
+  
+  if (now > 1000000000) {
+    timeConfigured = true;
+    lastTimeUpdate = millis();
+    LOG_INFOF("Time synchronized: %s", getCurrentTimeString().c_str());
+  } else {
+    LOG_WARN("Failed to synchronize time via NTP");
+  }
+}
+
+void updateTime() {
+  // Update time periodically
+  if (millis() - lastTimeUpdate > TIME_UPDATE_INTERVAL) {
+    LOG_DEBUG("Refreshing NTP time sync");
+    configTime(timezoneOffset * 3600, daylightOffset * 3600, NTP_SERVER);
+    lastTimeUpdate = millis();
+  }
+}
+
+String getCurrentTimeString() {
+  time_t now = time(nullptr);
+  struct tm* timeInfo = localtime(&now);
+  char timeStr[32];
+  strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", timeInfo);
+  return String(timeStr);
+}
+
+void logPresenceChange(TeamsPresence newPresence) {
+  if (!timeConfigured) {
+    LOG_WARN("Cannot log presence change - time not configured");
+    return;
+  }
+  
+  // Get current time
+  time_t now = time(nullptr);
+  
+  // Convert presence to string
+  const char* presenceStr = "";
+  switch (newPresence) {
+    case PRESENCE_AVAILABLE: presenceStr = "Available"; break;
+    case PRESENCE_BUSY: presenceStr = "Busy"; break;
+    case PRESENCE_IN_MEETING: presenceStr = "In Meeting"; break;
+    case PRESENCE_AWAY: presenceStr = "Away"; break;
+    case PRESENCE_OFFLINE: presenceStr = "Offline"; break;
+    default: presenceStr = "Unknown"; break;
+  }
+  
+  // Add to circular buffer
+  presenceLogs[presenceLogIndex].timestamp = now;
+  presenceLogs[presenceLogIndex].presence = newPresence;
+  strncpy(presenceLogs[presenceLogIndex].presenceString, presenceStr, sizeof(presenceLogs[presenceLogIndex].presenceString) - 1);
+  presenceLogs[presenceLogIndex].presenceString[sizeof(presenceLogs[presenceLogIndex].presenceString) - 1] = '\0';
+  
+  // Update indices
+  presenceLogIndex = (presenceLogIndex + 1) % MAX_PRESENCE_LOGS;
+  if (presenceLogCount < MAX_PRESENCE_LOGS) {
+    presenceLogCount++;
+  }
+  
+  LOG_INFOF("Logged presence change: %s at %s", presenceStr, getCurrentTimeString().c_str());
+  
+  // Save to persistent storage
+  savePresenceLogs();
+}
+
+void loadPresenceLogs() {
+  LOG_INFO("Loading presence logs from flash memory");
+  
+  presenceLogCount = preferences.getUInt(KEY_PRESENCE_LOG_COUNT, 0);
+  if (presenceLogCount > MAX_PRESENCE_LOGS) {
+    presenceLogCount = MAX_PRESENCE_LOGS;
+  }
+  
+  for (uint8_t i = 0; i < presenceLogCount; i++) {
+    String logKey = String(KEY_PRESENCE_LOG_PREFIX) + String(i);
+    String logData = preferences.getString(logKey.c_str(), "");
+    
+    if (logData.length() > 0) {
+      // Parse: timestamp,presence,presenceString
+      int firstComma = logData.indexOf(',');
+      int secondComma = logData.indexOf(',', firstComma + 1);
+      
+      if (firstComma > 0 && secondComma > firstComma) {
+        presenceLogs[i].timestamp = logData.substring(0, firstComma).toInt();
+        presenceLogs[i].presence = (TeamsPresence)logData.substring(firstComma + 1, secondComma).toInt();
+        String presenceStr = logData.substring(secondComma + 1);
+        strncpy(presenceLogs[i].presenceString, presenceStr.c_str(), sizeof(presenceLogs[i].presenceString) - 1);
+        presenceLogs[i].presenceString[sizeof(presenceLogs[i].presenceString) - 1] = '\0';
+      }
+    }
+  }
+  
+  presenceLogIndex = presenceLogCount % MAX_PRESENCE_LOGS;
+  LOG_INFOF("Loaded %d presence log entries", presenceLogCount);
+}
+
+void savePresenceLogs() {
+  preferences.putUInt(KEY_PRESENCE_LOG_COUNT, presenceLogCount);
+  
+  // Save logs in a circular manner - save the most recent entries
+  uint8_t startIndex = (presenceLogCount >= MAX_PRESENCE_LOGS) ? presenceLogIndex : 0;
+  uint8_t logsToSave = (presenceLogCount >= MAX_PRESENCE_LOGS) ? MAX_PRESENCE_LOGS : presenceLogCount;
+  
+  for (uint8_t i = 0; i < logsToSave; i++) {
+    uint8_t logArrayIndex = (startIndex + i) % MAX_PRESENCE_LOGS;
+    String logKey = String(KEY_PRESENCE_LOG_PREFIX) + String(i);
+    String logData = String(presenceLogs[logArrayIndex].timestamp) + "," + 
+                     String(presenceLogs[logArrayIndex].presence) + "," + 
+                     String(presenceLogs[logArrayIndex].presenceString);
+    preferences.putString(logKey.c_str(), logData);
+  }
+}
+
+void handlePresenceHistory() {
+  LOG_DEBUG("Presence history API request received");
+  
+  DynamicJsonDocument doc(4096);
+  JsonArray logs = doc.createNestedArray("logs");
+  
+  // Add current time info
+  doc["current_time"] = getCurrentTimeString();
+  doc["time_configured"] = timeConfigured;
+  doc["timezone_offset"] = timezoneOffset;
+  doc["daylight_offset"] = daylightOffset;
+  
+  // Add logs in chronological order (oldest first)
+  if (presenceLogCount > 0) {
+    uint8_t startIndex = (presenceLogCount >= MAX_PRESENCE_LOGS) ? presenceLogIndex : 0;
+    uint8_t logsToShow = (presenceLogCount >= MAX_PRESENCE_LOGS) ? MAX_PRESENCE_LOGS : presenceLogCount;
+    
+    for (uint8_t i = 0; i < logsToShow; i++) {
+      uint8_t logArrayIndex = (startIndex + i) % MAX_PRESENCE_LOGS;
+      JsonObject logEntry = logs.createNestedObject();
+      
+      // Format timestamp as ISO string
+      time_t timestamp = presenceLogs[logArrayIndex].timestamp;
+      struct tm* timeInfo = localtime(&timestamp);
+      char timeStr[32];
+      strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", timeInfo);
+      
+      logEntry["timestamp"] = timeStr;
+      logEntry["presence"] = presenceLogs[logArrayIndex].presenceString;
+      logEntry["presence_code"] = presenceLogs[logArrayIndex].presence;
+    }
+  }
+  
+  doc["total_logs"] = presenceLogCount;
+  doc["max_logs"] = MAX_PRESENCE_LOGS;
+  
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
 }
 
