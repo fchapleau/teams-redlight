@@ -2209,7 +2209,7 @@ bool refreshAccessToken() {
     }
     
     // If it's a 401 (Unauthorized), the refresh token is likely invalid/expired
-    if (httpCode == 401) {
+    if (httpCode == HTTP_CODE_UNAUTHORIZED) {
       LOG_WARN("HTTP 401 during token refresh - refresh token may be invalid or expired");
       LOG_INFO("Clearing stored tokens to force re-authentication");
       
