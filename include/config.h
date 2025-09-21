@@ -29,6 +29,12 @@
 #define GRAPH_API_ENDPOINT "/v1.0/me/presence"
 #define GRAPH_LOGIN_HOST "login.microsoftonline.com"
 
+// Time Configuration
+#define NTP_SERVER "pool.ntp.org"
+#define NTP_TIMEZONE_OFFSET 0       // UTC by default
+#define NTP_DAYLIGHT_OFFSET 0       // No daylight saving by default
+#define TIME_UPDATE_INTERVAL 3600000 // Update time every hour (in milliseconds)
+
 // Device Code Flow Configuration
 #define DEVICE_CODE_SCOPE "https://graph.microsoft.com/Presence.Read offline_access"
 #define DEVICE_CODE_POLL_INTERVAL 5000  // 5 seconds
@@ -51,6 +57,15 @@
 #define KEY_USER_CODE "user_code"
 #define KEY_VERIFICATION_URI "verify_uri"
 #define KEY_DEVICE_CODE_EXPIRES "dev_code_exp"
+
+// Presence Logging Storage Keys
+#define KEY_PRESENCE_LOG_COUNT "pres_log_count"
+#define KEY_PRESENCE_LOG_PREFIX "pres_log_"
+#define MAX_PRESENCE_LOGS 50  // Maximum number of presence logs to store
+
+// Time Configuration Storage Keys
+#define KEY_TIMEZONE_OFFSET "timezone_offset"
+#define KEY_DAYLIGHT_OFFSET "daylight_offset"
 
 // LED Pattern Storage Keys
 #define KEY_MEETING_PATTERN "meeting_pattern"
@@ -128,6 +143,13 @@ struct LEDConfig {
   unsigned long doubleBlinksStartTime;
   bool doubleBlinksState;
   int doubleBlinksCount;
+};
+
+// Presence Log Entry Structure
+struct PresenceLogEntry {
+  time_t timestamp;
+  TeamsPresence presence;
+  char presenceString[20]; // Human readable presence
 };
 
 #endif // CONFIG_H

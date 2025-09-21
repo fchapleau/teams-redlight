@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <Update.h>
+#include <time.h>
 #include "config.h"
 #include "logging.h"
 
@@ -53,6 +54,17 @@ String verificationUri;
 unsigned long deviceCodeExpires = 0;
 unsigned long lastDeviceCodePoll = 0;
 
+// Time synchronization variables
+unsigned long lastTimeUpdate = 0;
+int timezoneOffset = NTP_TIMEZONE_OFFSET;
+int daylightOffset = NTP_DAYLIGHT_OFFSET;
+bool timeConfigured = false;
+
+// Presence logging variables
+PresenceLogEntry presenceLogs[MAX_PRESENCE_LOGS];
+uint8_t presenceLogCount = 0;
+uint8_t presenceLogIndex = 0;
+
 // Function declarations
 void setupLED();
 void updateLED();
@@ -83,6 +95,13 @@ void checkTeamsPresence();
 bool refreshAccessToken();
 void loadConfiguration();
 void saveConfiguration();
+void setupTime();
+void updateTime();
+String getCurrentTimeString();
+void logPresenceChange(TeamsPresence newPresence);
+void loadPresenceLogs();
+void savePresenceLogs();
+void handlePresenceHistory();
 
 void setup() {
   Logger::begin(115200);
@@ -98,6 +117,10 @@ void setup() {
   LOG_DEBUG("Loading configuration");
   // Load saved configuration
   loadConfiguration();
+  
+  LOG_DEBUG("Loading presence logs");
+  // Load presence logs
+  loadPresenceLogs();
   
   // Check if device code flow was in progress
   if (deviceCode.length() > 0 && deviceCodeExpires > millis()) {
@@ -127,6 +150,11 @@ void loop() {
   
   updateLED();
   
+  // Update time if connected to WiFi
+  if (WiFi.status() == WL_CONNECTED && timeConfigured) {
+    updateTime();
+  }
+  
   // Handle different states
   switch (currentState) {
     case STATE_AP_MODE:
@@ -138,6 +166,12 @@ void loop() {
         LOG_INFO("WiFi connected successfully!");
         LOG_INFOF("IP address: %s", WiFi.localIP().toString().c_str());
         LOG_INFOF("Signal strength: %d dBm", WiFi.RSSI());
+        
+        // Setup time synchronization after WiFi connection
+        if (!timeConfigured) {
+          LOG_DEBUG("Setting up time synchronization");
+          setupTime();
+        }
         
         if (accessToken.length() > 0) {
           LOG_DEBUG("Access token found, transitioning to authenticated state");
@@ -632,6 +666,11 @@ void setupWebServer() {
   server.on("/schedule", [](){
     LOG_DEBUG("Serving schedule API request");
     handleSchedule();
+  });
+  
+  server.on("/presence-history", [](){
+    LOG_DEBUG("Serving presence history API request");
+    handlePresenceHistory();
   });
   
   server.on("/location", [](){
@@ -1383,6 +1422,18 @@ void handleStatus() {
     led["offline_pattern"] = getPatternName(leds[i].offlinePattern);
   }
   
+  // Add time information
+  doc["time_configured"] = timeConfigured;
+  if (timeConfigured) {
+    doc["current_time"] = getCurrentTimeString();
+    doc["timezone_offset"] = timezoneOffset;
+    doc["daylight_offset"] = daylightOffset;
+  }
+  
+  // Add presence logging info
+  doc["presence_logs_count"] = presenceLogCount;
+  doc["max_presence_logs"] = MAX_PRESENCE_LOGS;
+  
   String response;
   serializeJson(doc, response);
   server.send(200, "application/json", response);
@@ -2109,6 +2160,10 @@ void checkTeamsPresence() {
       
       LOG_INFOF("Teams presence changed: %s (was %s)", presenceStr, 
                currentPresence == PRESENCE_UNKNOWN ? "Unknown" : "different");
+      
+      // Log presence change persistently
+      logPresenceChange(newPresence);
+      
       currentPresence = newPresence;
     } else {
       LOG_DEBUG("Teams presence unchanged");
@@ -2246,6 +2301,10 @@ void loadConfiguration() {
   verificationUri = preferences.getString(KEY_VERIFICATION_URI, "");
   deviceCodeExpires = preferences.getULong64(KEY_DEVICE_CODE_EXPIRES, 0);
   
+  // Load time configuration
+  timezoneOffset = preferences.getInt(KEY_TIMEZONE_OFFSET, NTP_TIMEZONE_OFFSET);
+  daylightOffset = preferences.getInt(KEY_DAYLIGHT_OFFSET, NTP_DAYLIGHT_OFFSET);
+  
   // Load LED pattern preferences (legacy for backward compatibility)
   callPattern = (LEDPattern)preferences.getUInt("call_pattern", DEFAULT_CALL_PATTERN);
   meetingPattern = (LEDPattern)preferences.getUInt(KEY_MEETING_PATTERN, DEFAULT_MEETING_PATTERN);
@@ -2295,6 +2354,8 @@ void loadConfiguration() {
   LOG_INFOF("Call LED Pattern: %d", callPattern);
   LOG_INFOF("Meeting LED Pattern: %d", meetingPattern);
   LOG_INFOF("Available LED Pattern: %d", availablePattern);
+  LOG_INFOF("Timezone Offset: %d hours", timezoneOffset);
+  LOG_INFOF("Daylight Offset: %d hours", daylightOffset);
   LOG_INFOF("LED Count: %d", ledCount);
   for (uint8_t i = 0; i < ledCount; i++) {
     LOG_INFOF("LED %d: GPIO %d, Call: %d, Meeting: %d, Available: %d, Away: %d, Offline: %d", 
@@ -2326,6 +2387,10 @@ void saveConfiguration() {
   preferences.putString(KEY_REFRESH_TOKEN, refreshToken);
   preferences.putULong64(KEY_TOKEN_EXPIRES, tokenExpires);
   
+  // Save time configuration
+  preferences.putInt(KEY_TIMEZONE_OFFSET, timezoneOffset);
+  preferences.putInt(KEY_DAYLIGHT_OFFSET, daylightOffset);
+  
   // Save LED pattern preferences (legacy for backward compatibility)
   preferences.putUInt("call_pattern", callPattern);
   preferences.putUInt(KEY_MEETING_PATTERN, meetingPattern);
@@ -2355,5 +2420,174 @@ void saveConfiguration() {
 void restartESP() {
   LOG_WARN("Device restart requested");
   ESP.restart();
+}
+
+void setupTime() {
+  LOG_INFO("Configuring time synchronization");
+  
+  // Configure NTP
+  configTime(timezoneOffset * 3600, daylightOffset * 3600, NTP_SERVER);
+  
+  // Wait for time to be set
+  LOG_DEBUG("Waiting for NTP time sync...");
+  time_t now = time(nullptr);
+  int attempts = 0;
+  while (now < 1000000000 && attempts < 20) { // Wait until we have a reasonable timestamp
+    delay(500);
+    now = time(nullptr);
+    attempts++;
+  }
+  
+  if (now > 1000000000) {
+    timeConfigured = true;
+    lastTimeUpdate = millis();
+    LOG_INFOF("Time synchronized: %s", getCurrentTimeString().c_str());
+  } else {
+    LOG_WARN("Failed to synchronize time via NTP");
+  }
+}
+
+void updateTime() {
+  // Update time periodically
+  if (millis() - lastTimeUpdate > TIME_UPDATE_INTERVAL) {
+    LOG_DEBUG("Refreshing NTP time sync");
+    configTime(timezoneOffset * 3600, daylightOffset * 3600, NTP_SERVER);
+    lastTimeUpdate = millis();
+  }
+}
+
+String getCurrentTimeString() {
+  time_t now = time(nullptr);
+  struct tm* timeInfo = localtime(&now);
+  char timeStr[32];
+  strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", timeInfo);
+  return String(timeStr);
+}
+
+void logPresenceChange(TeamsPresence newPresence) {
+  if (!timeConfigured) {
+    LOG_WARN("Cannot log presence change - time not configured");
+    return;
+  }
+  
+  // Get current time
+  time_t now = time(nullptr);
+  
+  // Convert presence to string
+  const char* presenceStr = "";
+  switch (newPresence) {
+    case PRESENCE_AVAILABLE: presenceStr = "Available"; break;
+    case PRESENCE_BUSY: presenceStr = "Busy"; break;
+    case PRESENCE_IN_MEETING: presenceStr = "In Meeting"; break;
+    case PRESENCE_AWAY: presenceStr = "Away"; break;
+    case PRESENCE_OFFLINE: presenceStr = "Offline"; break;
+    default: presenceStr = "Unknown"; break;
+  }
+  
+  // Add to circular buffer
+  presenceLogs[presenceLogIndex].timestamp = now;
+  presenceLogs[presenceLogIndex].presence = newPresence;
+  strncpy(presenceLogs[presenceLogIndex].presenceString, presenceStr, sizeof(presenceLogs[presenceLogIndex].presenceString) - 1);
+  presenceLogs[presenceLogIndex].presenceString[sizeof(presenceLogs[presenceLogIndex].presenceString) - 1] = '\0';
+  
+  // Update indices
+  presenceLogIndex = (presenceLogIndex + 1) % MAX_PRESENCE_LOGS;
+  if (presenceLogCount < MAX_PRESENCE_LOGS) {
+    presenceLogCount++;
+  }
+  
+  LOG_INFOF("Logged presence change: %s at %s", presenceStr, getCurrentTimeString().c_str());
+  
+  // Save to persistent storage
+  savePresenceLogs();
+}
+
+void loadPresenceLogs() {
+  LOG_INFO("Loading presence logs from flash memory");
+  
+  presenceLogCount = preferences.getUInt(KEY_PRESENCE_LOG_COUNT, 0);
+  if (presenceLogCount > MAX_PRESENCE_LOGS) {
+    presenceLogCount = MAX_PRESENCE_LOGS;
+  }
+  
+  for (uint8_t i = 0; i < presenceLogCount; i++) {
+    String logKey = String(KEY_PRESENCE_LOG_PREFIX) + String(i);
+    String logData = preferences.getString(logKey.c_str(), "");
+    
+    if (logData.length() > 0) {
+      // Parse: timestamp,presence,presenceString
+      int firstComma = logData.indexOf(',');
+      int secondComma = logData.indexOf(',', firstComma + 1);
+      
+      if (firstComma > 0 && secondComma > firstComma) {
+        presenceLogs[i].timestamp = logData.substring(0, firstComma).toInt();
+        presenceLogs[i].presence = (TeamsPresence)logData.substring(firstComma + 1, secondComma).toInt();
+        String presenceStr = logData.substring(secondComma + 1);
+        strncpy(presenceLogs[i].presenceString, presenceStr.c_str(), sizeof(presenceLogs[i].presenceString) - 1);
+        presenceLogs[i].presenceString[sizeof(presenceLogs[i].presenceString) - 1] = '\0';
+      }
+    }
+  }
+  
+  presenceLogIndex = presenceLogCount % MAX_PRESENCE_LOGS;
+  LOG_INFOF("Loaded %d presence log entries", presenceLogCount);
+}
+
+void savePresenceLogs() {
+  preferences.putUInt(KEY_PRESENCE_LOG_COUNT, presenceLogCount);
+  
+  // Save logs in a circular manner - save the most recent entries
+  uint8_t startIndex = (presenceLogCount >= MAX_PRESENCE_LOGS) ? presenceLogIndex : 0;
+  uint8_t logsToSave = (presenceLogCount >= MAX_PRESENCE_LOGS) ? MAX_PRESENCE_LOGS : presenceLogCount;
+  
+  for (uint8_t i = 0; i < logsToSave; i++) {
+    uint8_t logArrayIndex = (startIndex + i) % MAX_PRESENCE_LOGS;
+    String logKey = String(KEY_PRESENCE_LOG_PREFIX) + String(i);
+    String logData = String(presenceLogs[logArrayIndex].timestamp) + "," + 
+                     String(presenceLogs[logArrayIndex].presence) + "," + 
+                     String(presenceLogs[logArrayIndex].presenceString);
+    preferences.putString(logKey.c_str(), logData);
+  }
+}
+
+void handlePresenceHistory() {
+  LOG_DEBUG("Presence history API request received");
+  
+  DynamicJsonDocument doc(4096);
+  JsonArray logs = doc.createNestedArray("logs");
+  
+  // Add current time info
+  doc["current_time"] = getCurrentTimeString();
+  doc["time_configured"] = timeConfigured;
+  doc["timezone_offset"] = timezoneOffset;
+  doc["daylight_offset"] = daylightOffset;
+  
+  // Add logs in chronological order (oldest first)
+  if (presenceLogCount > 0) {
+    uint8_t startIndex = (presenceLogCount >= MAX_PRESENCE_LOGS) ? presenceLogIndex : 0;
+    uint8_t logsToShow = (presenceLogCount >= MAX_PRESENCE_LOGS) ? MAX_PRESENCE_LOGS : presenceLogCount;
+    
+    for (uint8_t i = 0; i < logsToShow; i++) {
+      uint8_t logArrayIndex = (startIndex + i) % MAX_PRESENCE_LOGS;
+      JsonObject logEntry = logs.createNestedObject();
+      
+      // Format timestamp as ISO string
+      time_t timestamp = presenceLogs[logArrayIndex].timestamp;
+      struct tm* timeInfo = localtime(&timestamp);
+      char timeStr[32];
+      strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", timeInfo);
+      
+      logEntry["timestamp"] = timeStr;
+      logEntry["presence"] = presenceLogs[logArrayIndex].presenceString;
+      logEntry["presence_code"] = presenceLogs[logArrayIndex].presence;
+    }
+  }
+  
+  doc["total_logs"] = presenceLogCount;
+  doc["max_logs"] = MAX_PRESENCE_LOGS;
+  
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
 }
 

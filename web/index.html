@@ -933,6 +933,8 @@
                             <div>State: <span class="status-value" id="deviceState">-</span></div>
                             <div>IP: <span id="deviceIP">-</span></div>
                             <div>Uptime: <span id="deviceUptime">-</span></div>
+                            <div>Time: <span id="deviceTime" class="status-value">-</span></div>
+                            <div>Timezone: <span id="deviceTimezone">-</span></div>
                         </div>
                     </div>
                     <div class="status-card" style="grid-column: 1 / -1;">
@@ -945,6 +947,12 @@
                         <h4>📅 Today's Schedule</h4>
                         <div id="scheduleList">
                             <div style="text-align: center; color: #6c757d; font-style: italic;">Loading schedule...</div>
+                        </div>
+                    </div>
+                    <div class="status-card" style="grid-column: 1 / -1;" id="presenceHistoryCard">
+                        <h4>📊 Presence History</h4>
+                        <div id="presenceHistoryList">
+                            <div style="text-align: center; color: #6c757d; font-style: italic;">Loading presence history...</div>
                         </div>
                     </div>
                 </div>
@@ -1151,6 +1159,24 @@
                 deviceUptime.textContent = 'Unknown';
             }
             
+            // Update time info
+            const deviceTime = document.getElementById('deviceTime');
+            const deviceTimezone = document.getElementById('deviceTimezone');
+            
+            if (status.time_configured && status.current_time) {
+                deviceTime.textContent = status.current_time;
+                deviceTime.className = 'status-value';
+                const tzOffset = status.timezone_offset || 0;
+                const dlOffset = status.daylight_offset || 0;
+                const totalOffset = tzOffset + dlOffset;
+                const sign = totalOffset >= 0 ? '+' : '';
+                deviceTimezone.textContent = `UTC${sign}${totalOffset}`;
+            } else {
+                deviceTime.textContent = 'Not synced';
+                deviceTime.className = '';
+                deviceTimezone.textContent = 'Not configured';
+            }
+            
             // Update LED status
             if (status.leds && status.leds.length > 0) {
                 ledCount.textContent = status.led_count || status.leds.length;
@@ -1186,6 +1212,7 @@
             // Update schedule when authenticated
             if (status.state === 'monitoring') {
                 updateScheduleDisplay();
+                updatePresenceHistoryDisplay();
             }
         }
         
@@ -1243,6 +1270,55 @@
                 console.error('Failed to fetch schedule:', error);
                 const scheduleList = document.getElementById('scheduleList');
                 scheduleList.innerHTML = '<div style="text-align: center; color: #6c757d; font-style: italic;">Failed to load schedule</div>';
+            }
+        }
+        
+        async function updatePresenceHistoryDisplay() {
+            try {
+                const response = await fetch('/presence-history');
+                const data = await response.json();
+                const presenceHistoryList = document.getElementById('presenceHistoryList');
+                
+                if (data.logs && data.logs.length > 0) {
+                    presenceHistoryList.innerHTML = '';
+                    
+                    // Show most recent entries first
+                    const recentLogs = data.logs.slice(-10).reverse();
+                    
+                    recentLogs.forEach(log => {
+                        const logDiv = document.createElement('div');
+                        logDiv.className = 'presence-log-entry';
+                        logDiv.style.cssText = 'display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; font-size: 12px;';
+                        
+                        // Get presence color
+                        let presenceClass = 'presence-unknown';
+                        switch (log.presence.toLowerCase()) {
+                            case 'available': presenceClass = 'presence-available'; break;
+                            case 'busy': presenceClass = 'presence-busy'; break;
+                            case 'in meeting': presenceClass = 'presence-meeting'; break;
+                            case 'away': presenceClass = 'presence-away'; break;
+                            case 'offline': presenceClass = 'presence-offline'; break;
+                        }
+                        
+                        logDiv.innerHTML = `
+                            <span class="${presenceClass}">${log.presence}</span>
+                            <span style="color: #6c757d;">${log.timestamp}</span>
+                        `;
+                        presenceHistoryList.appendChild(logDiv);
+                    });
+                    
+                    // Add summary info
+                    const summaryDiv = document.createElement('div');
+                    summaryDiv.style.cssText = 'margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee; font-size: 11px; color: #6c757d; text-align: center;';
+                    summaryDiv.innerHTML = `Total entries: ${data.total_logs} | Current time: ${data.current_time || 'Not available'}`;
+                    presenceHistoryList.appendChild(summaryDiv);
+                } else {
+                    presenceHistoryList.innerHTML = '<div style="text-align: center; color: #6c757d; font-style: italic;">No presence history available</div>';
+                }
+            } catch (error) {
+                console.error('Failed to fetch presence history:', error);
+                const presenceHistoryList = document.getElementById('presenceHistoryList');
+                presenceHistoryList.innerHTML = '<div style="text-align: center; color: #6c757d; font-style: italic;">Failed to load presence history</div>';
             }
         }
         
