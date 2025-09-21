@@ -11,11 +11,11 @@ void test_https_client_setup() {
 }
 
 void test_https_insecure_mode() {
-    // Test that setInsecure method is available for HTTPClient
-    HTTPClient http;
+    // Test that setInsecure method is available for WiFiClientSecure
+    WiFiClientSecure secureClient;
     
-    // This should not fail - setInsecure() should be available
-    http.setInsecure();
+    // This should not fail - setInsecure() should be available on WiFiClientSecure
+    secureClient.setInsecure();
     TEST_ASSERT_TRUE(true);
 }
 
@@ -35,15 +35,15 @@ void test_microsoft_graph_api_endpoints() {
 }
 
 void test_http_client_begin_with_https() {
-    // Test that HTTPClient can begin() with HTTPS URLs
+    // Test that HTTPClient can begin() with HTTPS URLs using WiFiClientSecure
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure(); // Set insecure mode (this is what our fix adds)
+    
     HTTPClient http;
     
     // This should not crash or throw errors
-    bool success = http.begin("https://graph.microsoft.com/v1.0/me/presence");
+    bool success = http.begin(secureClient, "https://graph.microsoft.com/v1.0/me/presence");
     TEST_ASSERT_TRUE(success);
-    
-    // Set insecure mode (this is what our fix adds)
-    http.setInsecure();
     
     // End the connection
     http.end();

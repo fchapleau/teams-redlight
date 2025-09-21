@@ -1493,12 +1493,13 @@ void handleCallback() {
     LOG_INFOF("Authorization code received (length: %d)", code.length());
     
     // Exchange code for tokens
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure(); // Disable SSL certificate verification for IoT device
     HTTPClient http;
     String tokenUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token";
     LOG_DEBUGF("Making token exchange request to: %s", tokenUrl.c_str());
     
-    http.begin(tokenUrl);
-    http.setInsecure(); // Disable SSL certificate verification for IoT device
+    http.begin(secureClient, tokenUrl);
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
     
     String deviceIP = WiFi.localIP().toString();
@@ -1595,11 +1596,12 @@ void handleCallback() {
 bool startDeviceCodeFlow() {
   LOG_INFO("Starting device code flow");
   
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure(); // Disable SSL certificate verification for IoT device
   HTTPClient http;
   String deviceCodeUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/devicecode";
   
-  http.begin(deviceCodeUrl);
-  http.setInsecure(); // Disable SSL certificate verification for IoT device
+  http.begin(secureClient, deviceCodeUrl);
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
   String postData = "client_id=" + clientId;
@@ -1665,11 +1667,12 @@ bool pollDeviceCodeToken() {
   
   LOG_DEBUG("Polling for device code token");
   
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure(); // Disable SSL certificate verification for IoT device
   HTTPClient http;
   String tokenUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token";
   
-  http.begin(tokenUrl);
-  http.setInsecure(); // Disable SSL certificate verification for IoT device
+  http.begin(secureClient, tokenUrl);
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
   String postData = "grant_type=urn:ietf:params:oauth:grant-type:device_code";
@@ -1778,11 +1781,12 @@ bool pollDeviceCodeTokenWithSecret() {
   
   LOG_DEBUG("Polling for device code token with client secret (confidential client)");
   
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure(); // Disable SSL certificate verification for IoT device
   HTTPClient http;
   String tokenUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token";
   
-  http.begin(tokenUrl);
-  http.setInsecure(); // Disable SSL certificate verification for IoT device
+  http.begin(secureClient, tokenUrl);
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
   String postData = "grant_type=urn:ietf:params:oauth:grant-type:device_code";
@@ -1886,9 +1890,10 @@ void checkTeamsPresence() {
   }
   
   LOG_DEBUG("Making Teams presence API request");
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure(); // Disable SSL certificate verification for IoT device
   HTTPClient http;
-  http.begin("https://graph.microsoft.com/v1.0/me/presence");
-  http.setInsecure(); // Disable SSL certificate verification for IoT device
+  http.begin(secureClient, "https://graph.microsoft.com/v1.0/me/presence");
   http.addHeader("Authorization", "Bearer " + accessToken);
   http.addHeader("User-Agent", "TeamsRedLight/1.0");
   
@@ -1978,12 +1983,13 @@ bool refreshAccessToken() {
   
   LOG_INFO("Refreshing OAuth access token...");
   
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure(); // Disable SSL certificate verification for IoT device
   HTTPClient http;
   String tokenUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token";
   LOG_DEBUGF("Token refresh URL: %s", tokenUrl.c_str());
   
-  http.begin(tokenUrl);
-  http.setInsecure(); // Disable SSL certificate verification for IoT device
+  http.begin(secureClient, tokenUrl);
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
   String postData = "client_id=" + clientId;
