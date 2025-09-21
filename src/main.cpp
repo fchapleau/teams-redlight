@@ -1498,6 +1498,7 @@ void handleCallback() {
     LOG_DEBUGF("Making token exchange request to: %s", tokenUrl.c_str());
     
     http.begin(tokenUrl);
+    http.setInsecure(); // Disable SSL certificate verification for IoT device
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
     
     String deviceIP = WiFi.localIP().toString();
@@ -1598,6 +1599,7 @@ bool startDeviceCodeFlow() {
   String deviceCodeUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/devicecode";
   
   http.begin(deviceCodeUrl);
+  http.setInsecure(); // Disable SSL certificate verification for IoT device
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
   String postData = "client_id=" + clientId;
@@ -1667,6 +1669,7 @@ bool pollDeviceCodeToken() {
   String tokenUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token";
   
   http.begin(tokenUrl);
+  http.setInsecure(); // Disable SSL certificate verification for IoT device
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
   String postData = "grant_type=urn:ietf:params:oauth:grant-type:device_code";
@@ -1779,6 +1782,7 @@ bool pollDeviceCodeTokenWithSecret() {
   String tokenUrl = "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token";
   
   http.begin(tokenUrl);
+  http.setInsecure(); // Disable SSL certificate verification for IoT device
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
   String postData = "grant_type=urn:ietf:params:oauth:grant-type:device_code";
@@ -1884,6 +1888,7 @@ void checkTeamsPresence() {
   LOG_DEBUG("Making Teams presence API request");
   HTTPClient http;
   http.begin("https://graph.microsoft.com/v1.0/me/presence");
+  http.setInsecure(); // Disable SSL certificate verification for IoT device
   http.addHeader("Authorization", "Bearer " + accessToken);
   http.addHeader("User-Agent", "TeamsRedLight/1.0");
   
@@ -1978,6 +1983,7 @@ bool refreshAccessToken() {
   LOG_DEBUGF("Token refresh URL: %s", tokenUrl.c_str());
   
   http.begin(tokenUrl);
+  http.setInsecure(); // Disable SSL certificate verification for IoT device
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
   String postData = "client_id=" + clientId;
